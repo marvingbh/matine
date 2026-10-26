@@ -32,6 +32,9 @@
   var STORE_KEY = 'tvhome.lastFocus';
   var HISTORY_KEY = 'tvhome.history';
   var REFRESH_MS = 6 * 3600 * 1000;
+  // Never suggested: anime and Asian titles (config hideAnime, hideLanguages, hideCountries).
+  // The TMDB lists are filtered in js/catalog.js; the rows built from the history here.
+  var HIDE = Smart.hideRule(CFG);
 
   var LONG_PRESS = 600;      // ms holding OK on a poster opens the title in its app
 
@@ -425,7 +428,7 @@
       out.push({ item: it, label: label });
       return true;
     }
-    Smart.continueList(state.history, Date.now(), 20).forEach(function (r) {
+    Smart.dropHidden(Smart.continueList(state.history, Date.now(), 20), HIDE).forEach(function (r) {
       if (r.app === app.key) add(r, 'Continuar assistindo');
     });
     (state.built.home || []).forEach(function (row) {
@@ -566,7 +569,7 @@
       return Catalog.details(it).then(function (d) { learnApps(it, d.providers); return appsOf(it) || []; });
     },
     streamIds: function () { return Smart.providerIdsFor(DATA.curated, state.installed); },
-    hideAnime: CFG.hideAnime !== false,
+    hide: HIDE,
     genres: function () { return state.genres; },
     // With nothing typed: the "em alta" rows of the home screen (no network).
     suggestions: function () { return (state.built.home || []).filter(function (r) { return r.cat === 'popular'; }); },
@@ -881,8 +884,8 @@
   // Rows from the history only (no network): Continuar assistindo and Quero ver.
   function localRows(type, now) {
     return {
-      cont: Smart.continueList(state.history, now, 20, type),
-      want: Smart.titlesWith(state.history, ['want'], type).slice(0, 20)
+      cont: Smart.dropHidden(Smart.continueList(state.history, now, 20, type), HIDE),
+      want: Smart.dropHidden(Smart.titlesWith(state.history, ['want'], type), HIDE).slice(0, 20)
     };
   }
 

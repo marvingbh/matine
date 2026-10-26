@@ -373,6 +373,33 @@ test('search categories: one per genre, with its film and TV id; TV-only genres 
   assert.deepStrictEqual(Smart.searchCategories(null), []);
 });
 
+test('Asian titles: dropped by original language, or origin country when given; config can turn it off', function () {
+  var rule = Smart.hideRule({});
+  var kdrama = item('tv', 61, 'Pousando no Amor', [35, 18], { lang: 'ko', countries: ['KR'] });
+  var cdrama = item('tv', 62, 'Série em inglês feita em Taiwan', [18], { lang: 'en', countries: ['TW'] });
+  var bolly = item('movie', 63, 'RRR', [28], { lang: 'te' });
+  var hkFilm = item('movie', 64, 'Filme de Hong Kong', [28], { lang: 'cn' });
+  var coProd = item('movie', 65, 'Coprodução', [18], { lang: 'en', countries: ['US', 'JP'] });
+  var brazil = item('movie', 66, 'Ainda Estou Aqui', [18], { lang: 'pt', countries: ['BR'] });
+  var noData = item('movie', 67, 'Sem idioma (cache antigo)', [18]);
+  var spanish = item('tv', 68, 'La Casa de Papel', [80], { lang: 'es', countries: ['ES'] });
+  var all = [kdrama, cdrama, bolly, hkFilm, coProd, brazil, noData, spanish];
+  assert.deepStrictEqual(Smart.dropHidden(all, rule).map(function (x) { return x.id; }), [66, 67, 68]);
+  assert.ok(Smart.isHidden(item('tv', 69, 'Frieren', [16], { lang: 'ja' }), rule), 'anime too');
+  var off = Smart.hideRule({ hideLanguages: false, hideCountries: false, hideAnime: false });
+  assert.strictEqual(Smart.dropHidden(all, off).length, all.length);
+  var onlyKo = Smart.hideRule({ hideLanguages: ['ko'], hideCountries: false });
+  assert.deepStrictEqual(Smart.dropHidden(all, onlyKo).map(function (x) { return x.id; }), [62, 63, 64, 65, 66, 67, 68]);
+  // The history keeps language and countries, so "Continuar" can be filtered too.
+  var h = Smart.emptyHistory();
+  Smart.recordTitle(h, kdrama, 'watching', 'netflix', NOW);
+  assert.strictEqual(h.titles['tv:61'].lang, 'ko');
+  assert.deepStrictEqual(Smart.dropHidden(Smart.continueList(h, NOW), rule), []);
+  // Search rows and people use the same rule.
+  var rows = Smart.searchRows({ items: [kdrama, spanish], people: [{ key: 'person:1', type: 'person', title: 'Ator', known: [kdrama] }] }, null, rule, null);
+  assert.deepStrictEqual(rows.map(function (r) { return r.id + '=' + r.items.length; }), ['tv=1']);
+});
+
 // catalog.js in a sandbox with a fake XMLHttpRequest: what it asks TMDB and what it returns.
 function catalogWith(cfg, answer) {
   var urls = [];
@@ -415,13 +442,13 @@ testAsync('catalog: discover excludes the anime keyword and every list drops ani
     assert.strictEqual(titles(list), '["Arcane","Shogun"]');
     return t.Catalog.recommendations({ type: 'tv', id: 99 });
   }).then(function (list) {
-    assert.ok(t.urls[1].indexOf('/tv/99/recommendations') !== -1);
+    assert.ok(t.urls[t.urls.length - 1].indexOf('/tv/99/recommendations') !== -1);
     assert.strictEqual(titles(list), '["Arcane","Shogun"]');
   });
 });
 
 testAsync('catalog: hideAnime false keeps anime', function () {
-  var t = catalogWith({ tmdbToken: 'test', hideAnime: false }, TMDB_ANSWER);
+  var t = catalogWith({ tmdbToken: 'test', hideAnime: false, hideLanguages: false, hideCountries: false }, TMDB_ANSWER);
   return t.Catalog.discover({ type: 'tv' }).then(function (list) {
     assert.ok(t.urls[0].indexOf('without_keywords') === -1, t.urls[0]);
     assert.strictEqual(list.length, 3);
@@ -495,6 +522,21 @@ testAsync('catalog search: text + Nota -> /search/movie and /search/tv (score ch
     t.urls.forEach(function (u) {
       assert.ok(/\/search\/(movie|tv)\?/.test(u) && u.indexOf('vote_average') === -1 && u.indexOf('watch_providers') === -1, u);
     });
+  });
+});
+
+testAsync('catalog: a discover page thinned by the filter is topped up once with the next page', function () {
+  var t = catalogWith({ tmdbToken: 'test' }, { results: [
+    { id: 1, media_type: 'tv', name: 'K-drama', poster_path: '/a.jpg', genre_ids: [18], original_language: 'ko', origin_country: ['KR'] },
+    { id: 2, media_type: 'tv', name: 'Arcane', poster_path: '/b.jpg', genre_ids: [16], original_language: 'en', origin_country: ['US'] }
+  ] });
+  return t.Catalog.discover({ type: 'tv', providers: [8] }).then(function (list) {
+    assert.strictEqual(t.urls.length, 2, t.urls.join(' '));
+    assert.ok(/[?&]page=2(&|$)/.test(t.urls[1]), t.urls[1]);
+    assert.strictEqual(titles(list), '["Arcane"]', 'deduplicated, Korean title left out');
+    return t.Catalog.discover({ type: 'tv', providers: [8], page: 2 });
+  }).then(function () {
+    assert.strictEqual(t.urls.length, 2, 'page 2 is cached and not topped up again');
   });
 });
 

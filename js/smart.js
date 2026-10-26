@@ -123,7 +123,8 @@
       key: item.key, id: item.id, type: item.type, title: item.title, year: item.year || '',
       poster: item.poster || '', backdrop: item.backdrop || '', palette: item.palette,
       overview: String(item.overview || '').slice(0, 320),
-      genreIds: (item.genreIds || []).slice(0, 6), rating: item.rating || 0, votes: item.votes || 0
+      genreIds: (item.genreIds || []).slice(0, 6), rating: item.rating || 0, votes: item.votes || 0,
+      lang: item.lang || '', countries: (item.countries || []).slice(0, 4)     // for isHidden
     };
   }
 
@@ -355,6 +356,40 @@
     return (items || []).filter(function (it) { return !isAnime(it); });
   }
 
+  // ---------- titles left out everywhere ----------
+  // Besides anime, East, Southeast and South Asian titles are never suggested (config
+  // hideLanguages / hideCountries, on by default; false turns a list off). Checked on what a
+  // list answer already has: the original language, and the origin countries (TMDB gives
+  // them for series and, in newer answers, for films). No request is made to find out more.
+  var HIDE_LANGUAGES = ['ko', 'ja', 'zh', 'cn', 'th', 'vi', 'id', 'ms', 'tl', 'hi', 'ta', 'te', 'ml', 'kn', 'bn', 'mr', 'pa', 'ur'];
+  var HIDE_COUNTRIES = ['KR', 'JP', 'CN', 'TW', 'HK', 'TH', 'VN', 'ID', 'MY', 'PH', 'IN', 'SG'];
+
+  // The rule from the config: { anime, langs: { code: 1 }, countries: { code: 1 } }.
+  function hideRule(cfg) {
+    cfg = cfg || {};
+    function set(v, def) {
+      var m = {};
+      (v === false ? [] : Array.isArray(v) ? v : def).forEach(function (x) { m[x] = 1; });
+      return m;
+    }
+    return { anime: cfg.hideAnime !== false, langs: set(cfg.hideLanguages, HIDE_LANGUAGES), countries: set(cfg.hideCountries, HIDE_COUNTRIES) };
+  }
+
+  // rule: from hideRule; true means anime only; falsy hides nothing.
+  function isHidden(it, rule) {
+    if (!it || !rule) return false;
+    if (rule === true) return isAnime(it);
+    if (rule.anime && isAnime(it)) return true;
+    if (it.lang && rule.langs[it.lang]) return true;
+    var cs = it.countries || [];
+    for (var i = 0; i < cs.length; i++) if (rule.countries[cs[i]]) return true;
+    return false;
+  }
+
+  function dropHidden(items, rule) {
+    return (items || []).filter(function (it) { return !isHidden(it, rule); });
+  }
+
   // ---------- search (the "Buscar" screen, js/search.js) ----------
 
   // The categories of the search filter: one entry per genre, with its id for films and for
@@ -409,20 +444,21 @@
   }
 
   // A search answer ({ items, people }) as the rows of the search screen: films and series
-  // apart, without titles marked "Já vi" (isWatched(key)), without anime when hideAnime, and
-  // only what passes the filter. People are kept unless a filter is set (or all they are
-  // known for is anime). Returns [{ id: 'movie'|'tv'|'people', items }], empty rows left out.
-  function searchRows(res, isWatched, hideAnime, filter) {
+  // apart, without titles marked "Já vi" (isWatched(key)), without what `hide` leaves out
+  // (hideRule; true: anime only), and only what passes the filter. People are kept unless a
+  // filter is set (or all they are known for is hidden). Returns
+  // [{ id: 'movie'|'tv'|'people', items }], empty rows left out.
+  function searchRows(res, isWatched, hide, filter) {
     var by = { movie: [], tv: [] }, seen = {};
     ((res && res.items) || []).forEach(function (it) {
       if (!it || !by[it.type] || seen[it.key]) return;
-      if ((hideAnime && isAnime(it)) || (isWatched && isWatched(it.key)) || !passesFilter(it, filter)) return;
+      if (isHidden(it, hide) || (isWatched && isWatched(it.key)) || !passesFilter(it, filter)) return;
       seen[it.key] = true;
       by[it.type].push(it);
     });
     var filtered = filter && (filter.cat || filter.year || filter.rating);
     var people = filtered ? [] : ((res && res.people) || []).filter(function (p) {
-      return !hideAnime || !p.known || !p.known.length || !p.known.every(isAnime);
+      return !hide || !p.known || !p.known.length || !p.known.every(function (k) { return isHidden(k, hide); });
     });
     return [{ id: 'movie', items: by.movie }, { id: 'tv', items: by.tv }, { id: 'people', items: people }]
       .filter(function (r) { return r.items.length; });
@@ -472,6 +508,9 @@
     isRain: isRain,
     isAnime: isAnime,
     dropAnime: dropAnime,
+    hideRule: hideRule,
+    isHidden: isHidden,
+    dropHidden: dropHidden,
     searchCategories: searchCategories,
     minVotes: minVotes,
     cardScore: cardScore,

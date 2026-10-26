@@ -30,6 +30,11 @@ window.TVHOME_CONFIG = {
   // Anime (Japanese animation) is left out of every suggestion row. false shows it again.
   // hideAnime: false
 
+  // East, Southeast and South Asian titles are left out everywhere too: by original language
+  // and (when TMDB gives it) origin country. A list replaces the default; false shows them.
+  // hideLanguages: ['ko', 'ja', 'zh', 'cn', 'th', 'vi', 'id', 'ms', 'tl', 'hi', 'ta', 'te', 'ml', 'kn', 'bn', 'mr', 'pa', 'ur'],
+  // hideCountries: ['KR', 'JP', 'CN', 'TW', 'HK', 'TH', 'VN', 'ID', 'MY', 'PH', 'IN', 'SG']
+
   // Samsung, top bar "Entradas": 'window' shows the chosen input full screen inside this app
   // instead of opening the TV's own viewer on it.
   // samsungInput: 'window'

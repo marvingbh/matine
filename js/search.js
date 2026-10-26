@@ -32,7 +32,7 @@
  *   appsOf(item)         the installed apps a title is on ([{ name }]), or null if not known yet
  *   lookup(item)         Promise: find out (details request, cached) which apps a title is on
  *   streamIds()          TMDB provider ids of the TV's apps (Só streaming)
- *   hideAnime            leave anime out (config hideAnime)
+ *   hide                 what is left out (Smart.hideRule: anime, Asian titles)
  *   genres()             { movie: { id: name }, tv: { id: name } } or null: the categories
  *   suggestions()        rows shown while there is no text and no filter: [{ id, title, items }]
  *   toast(msg, isError)
@@ -308,7 +308,7 @@
     function computeRows() {
       var f = filter(), rows;
       if (s.person) {
-        rows = Smart.searchRows(s.person.res, opts.isWatched, opts.hideAnime, null).map(function (r) {
+        rows = Smart.searchRows(s.person.res, opts.isWatched, opts.hide, null).map(function (r) {
           return { id: r.id, title: LABEL[r.id] + ' com ' + s.person.item.title, items: r.items };
         });
       } else if (!f.text && !f.cat && !f.year && !f.rating) {
@@ -316,7 +316,7 @@
           return { id: r.id, title: r.title, items: r.items.filter(function (it) { return !opts.isWatched(it.key); }) };
         });
       } else {
-        rows = Smart.searchRows(s.res, opts.isWatched, opts.hideAnime, f).map(function (r) {
+        rows = Smart.searchRows(s.res, opts.isWatched, opts.hide, f).map(function (r) {
           return { id: r.id, title: LABEL[r.id], items: r.items };
         });
       }
@@ -406,7 +406,7 @@
       cancelChecks();
       if (!checking()) return;
       var src = s.person ? s.person.res : s.res;
-      var lists = Smart.searchRows(src, opts.isWatched, opts.hideAnime, s.person ? null : filter())
+      var lists = Smart.searchRows(src, opts.isWatched, opts.hide, s.person ? null : filter())
         .filter(function (r) { return r.id !== 'people'; })
         .map(function (r) {
           return r.items.filter(function (it) { return opts.appsOf(it) === null && !s.failed[it.key]; });

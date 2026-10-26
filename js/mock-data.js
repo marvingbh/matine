@@ -35,7 +35,7 @@
       overview: 'Funcionários de uma empresa misteriosa passam por um procedimento que separa a memória do trabalho da vida pessoal. Até que um deles começa a desconfiar do que acontece no escritório.' },
     { id: 136315, type: 'tv', title: 'O Urso', year: 2022, genres: [35, 18], rating: 8.2, votes: 1500, popularity: 190, seasons: 3, palette: 3, providers: [DISNEY], imdbId: 'tt14452776',
       overview: 'Um chef premiado volta a Chicago para assumir a lanchonete da família depois de uma tragédia, e tenta transformar a cozinha caótica em um restaurante de verdade.' },
-    { id: 93405, type: 'tv', title: 'Round 6', year: 2021, genres: [10759, 9648, 18], rating: 7.8, votes: 15000, popularity: 520, seasons: 3, palette: 4, providers: [NETFLIX], imdbId: 'tt10919420',
+    { id: 93405, type: 'tv', title: 'Round 6', year: 2021, genres: [10759, 9648, 18], rating: 7.8, votes: 15000, popularity: 520, seasons: 3, palette: 4, providers: [NETFLIX], lang: 'ko', countries: ['KR'], imdbId: 'tt10919420',
       overview: 'Centenas de pessoas endividadas aceitam participar de jogos infantis por um prêmio milionário. As regras são simples; perder custa a vida.' },
     { id: 693134, type: 'movie', title: 'Duna: Parte Dois', year: 2024, genres: [878, 12], rating: 8.1, votes: 6800, popularity: 400, runtime: 166, palette: 5, providers: [MAX], imdbId: 'tt15239678',
       overview: 'Paul Atreides se une a Chani e aos Fremen em uma guerra de vingança contra quem destruiu sua família, enquanto tenta evitar um futuro terrível que só ele consegue prever.' },
@@ -71,7 +71,7 @@
       overview: 'Uma escrivã da polícia de São Paulo decide investigar por conta própria dois casos de violência contra mulheres que ninguém quer ver.' },
     { id: 157336, type: 'movie', title: 'Interestelar', year: 2014, genres: [12, 18, 878], rating: 8.4, votes: 36000, popularity: 200, runtime: 169, palette: 7, providers: [PARAMOUNT], imdbId: 'tt0816692',
       overview: 'Com a Terra à beira do colapso, um grupo de astronautas atravessa um buraco de minhoca em busca de um novo lar para a humanidade.' },
-    { id: 496243, type: 'movie', title: 'Parasita', year: 2019, genres: [35, 53, 18], rating: 8.5, votes: 18000, popularity: 120, runtime: 133, palette: 2, providers: [MAX], imdbId: 'tt6751668',
+    { id: 496243, type: 'movie', title: 'Parasita', year: 2019, genres: [35, 53, 18], rating: 8.5, votes: 18000, popularity: 120, runtime: 133, palette: 2, providers: [MAX], lang: 'ko', imdbId: 'tt6751668',
       overview: 'Uma família pobre se infiltra, um por um, na casa de uma família rica, até que um segredo escondido no porão muda tudo.' },
     { id: 361743, type: 'movie', title: 'Top Gun: Maverick', year: 2022, genres: [28, 18], rating: 8.2, votes: 9000, popularity: 150, runtime: 131, palette: 5, providers: [PARAMOUNT],
       overview: 'Depois de trinta anos como piloto, Maverick volta à escola Top Gun para treinar jovens aviadores para uma missão quase impossível.' },
@@ -93,7 +93,7 @@
       overview: 'Uma robô naufraga numa ilha deserta, aprende a sobreviver entre os animais e acaba adotando um filhote de ganso órfão.' },
     { id: 915935, type: 'movie', title: 'Anatomia de uma Queda', year: 2023, genres: [18, 9648, 53], rating: 7.7, votes: 2400, popularity: 60, runtime: 151, palette: 7, providers: [PRIME],
       overview: 'Uma escritora é acusada da morte do marido, e o único que pode ajudar a esclarecer o que aconteceu é o filho do casal, que é cego.' },
-    { id: 976893, type: 'movie', title: 'Dias Perfeitos', year: 2023, genres: [18], rating: 7.8, votes: 900, popularity: 35, runtime: 124, palette: 5, providers: [MUBI],
+    { id: 976893, type: 'movie', title: 'Dias Perfeitos', year: 2023, genres: [18], rating: 7.8, votes: 900, popularity: 35, runtime: 124, palette: 5, providers: [MUBI], lang: 'ja',
       overview: 'Hirayama limpa banheiros públicos em Tóquio e encontra beleza na rotina, nas árvores e nas fitas cassete que ouve no carro.' },
     { id: 264218, type: 'tv', title: 'Vale Tudo', year: 2025, genres: [18], rating: 6.8, votes: 90, popularity: 150, seasons: 1, palette: 0, providers: [GLOBO],
       overview: 'Raquel, uma mulher honesta, enfrenta a própria filha, que fará de tudo para subir na vida, numa nova versão da novela clássica.' },
@@ -108,6 +108,11 @@
   // Japanese animation, to see the anime filter at work (hidden everywhere with hideAnime).
   titles.push({ id: 209867, type: 'tv', title: 'Frieren e a Jornada para o Além', year: 2023, genres: [16, 10759, 10765], rating: 8.8, votes: 600, popularity: 90, seasons: 1, palette: 1, providers: [NETFLIX], lang: 'ja', countries: ['JP'],
     overview: 'Depois de derrotar o Rei Demônio, uma maga elfa revisita os lugares da jornada e descobre o que a amizade com os companheiros significou.' });
+
+  // Korean (and Round 6, Parasita, Dias Perfeitos above are Korean / Japanese): left out
+  // everywhere by hideLanguages / hideCountries, although popular on the TV's apps.
+  titles.push({ id: 94796, type: 'tv', title: 'Pousando no Amor', year: 2019, genres: [35, 18], rating: 8.7, votes: 1900, popularity: 600, seasons: 1, palette: 6, providers: [NETFLIX], lang: 'ko', countries: ['KR'],
+    overview: 'Uma herdeira sul-coreana cai de parapente na Coreia do Norte e é escondida por um oficial do exército que se apaixona por ela.' });
 
   // Not on any streaming service in Brazil: "Só streaming" leaves it out of the search.
   titles.push({ id: 515195, type: 'movie', title: 'Bacurau', year: 2019, genres: [18, 53, 878], rating: 7.2, votes: 900, popularity: 30, runtime: 131, palette: 4, providers: [],

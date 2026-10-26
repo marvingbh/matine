@@ -28,8 +28,10 @@
   var REGION = CFG.region || 'BR';
   var HOUR = 3600 * 1000;
   var TTL = (CFG.cacheHours || 6) * HOUR;
-  // No anime in any row (Smart.isAnime). 210024 is TMDB's "anime" keyword.
+  // No anime in any row (Smart.isAnime). 210024 is TMDB's "anime" keyword. Asian titles
+  // (Smart.hideRule: hideLanguages, hideCountries) are left out of every list too.
   var HIDE_ANIME = CFG.hideAnime !== false;
+  var HIDE = window.Smart ? window.Smart.hideRule(CFG) : null;
   var ANIME_KEYWORD = 210024;
 
   var browser = !!(window.Platform && !window.Platform.isTV && MOCK);
@@ -508,16 +510,33 @@
     });
   }
 
-  // Every title list goes through the anime filter (cached answers too).
-  function noAnime(fn) {
-    if (!HIDE_ANIME || !window.Smart) return fn;
-    return function (arg) { return fn(arg).then(window.Smart.dropAnime); };
+  // Every title list goes through the filter (cached answers too). TMDB cannot leave out an
+  // original language, so a discover page the filter thins out (fewer than MIN_KEPT left) is
+  // topped up once with the next page.
+  var MIN_KEPT = 12;
+  function noHidden(fn, more) {
+    if (!HIDE) return fn;
+    return function (q) {
+      return fn(q).then(function (list) {
+        var kept = window.Smart.dropHidden(list, HIDE);
+        if (!more || kept.length >= MIN_KEPT || kept.length === list.length || (q.page || 1) > 1) return kept;
+        var q2 = {};
+        for (var k in q) q2[k] = q[k];
+        q2.page = (q.page || 1) + 1;
+        return fn(q2).then(function (next) {
+          var seen = {};
+          kept.forEach(function (it) { seen[it.key] = true; });
+          return kept.concat(window.Smart.dropHidden(next, HIDE).filter(function (it) { return !seen[it.key]; }));
+        }, function () { return kept; });
+      });
+    };
   }
 
   window.Catalog = {
     mode: mode,                 // 'tmdb' | 'mock' | 'off'
-    discover: noAnime(impl.discover),
-    recommendations: noAnime(impl.recommendations),
+    discover: noHidden(impl.discover, true),
+    recommendations: noHidden(impl.recommendations, false),
+    hide: HIDE,                 // the rule (Smart.hideRule) for the lists built elsewhere
     details: impl.details,
     genres: impl.genres,
     imdbRating: imdbRating,
