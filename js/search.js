@@ -1,6 +1,6 @@
 /*
- * The "Buscar" screen, like the tvOS search: the query at the top, two filters (Categoria
- * and Ano) under it, an on-screen keyboard moved with the arrows (the TVs' own keyboards are
+ * The "Buscar" screen, like the tvOS search: the query at the top, four filters (Categoria,
+ * Ano, Nota and Só streaming) under it, an on-screen keyboard moved with the arrows (the TVs' own keyboards are
  * slow and differ per model), and the results under that as poster rows: Filmes, Séries and
  * Pessoas, kept apart as everywhere else. js/app.js owns the zone and the keys; OK on a title
  * goes to the same details, "Abrir em…" and launch code as the rows (js/discover.js).
@@ -18,11 +18,20 @@
  *   setting a filter back shows the earlier results at once.
  * - Moving between results does no network: the cards come from the answer, with the rows'
  *   poster sizes, and only a window of about 11 cards per row is in the DOM.
+ * - Só streaming (on by default): with filters only, TMDB itself returns titles on the TV's
+ *   apps (catalog.js). With text, TMDB cannot filter, so when an answer arrives the apps of
+ *   its titles are looked up in the background, 4 at a time, in the answer's order (the
+ *   details request, cached, which the details screen then reuses); never on a key press.
+ *   The rows wait for the first 8 answers, then each row shows its titles in order up to the
+ *   first one still being checked: cards are only added at the end, nothing on screen moves.
  *
  * opts:
  *   catalog              window.Catalog (search, searchKnown, personTitles, mode)
  *   cardNode(item)       a poster card, the same as in the rows (js/discover.js)
  *   isWatched(key)       true for a title marked "Já vi" (left out)
+ *   appsOf(item)         the installed apps a title is on ([{ name }]), or null if not known yet
+ *   lookup(item)         Promise: find out (details request, cached) which apps a title is on
+ *   streamIds()          TMDB provider ids of the TV's apps (Só streaming)
  *   hideAnime            leave anime out (config hideAnime)
  *   genres()             { movie: { id: name }, tv: { id: name } } or null: the categories
  *   suggestions()        rows shown while there is no text and no filter: [{ id, title, items }]
@@ -41,7 +50,9 @@
   var MARGIN = 1;
   var EXTRA = LITE ? 1 : 2;
   var ROWS_TOP = 340;       // css .search__rows: the results, under the filters and the keyboard
-  var CHIP_X = 400;         // css .search__chip: width 384 + gap 16
+  var CHIP_X = 368;         // css .search__chip: width 352 + gap 16
+  var LOOK_PARALLEL = 4;    // streaming checks at a time
+  var FIRST_BATCH = 8;      // the rows wait for this many checks
   var PICK_ROWS = 8;        // lines a filter list shows at once
   var PICK_H = 62;          // css .pick__item
   var WAIT = 350;           // ms after the last letter before TMDB is asked
@@ -87,7 +98,8 @@
       '<div class="search__query">' + ICON + '<span class="search__text"></span><i class="search__caret"></i>' +
         '<span class="search__ph">Filmes, séries e pessoas</span><span class="search__sum"></span></div>' +
       '<div class="search__view"><div class="search__body">' +
-        '<div class="search__chips"><div class="search__chip"></div><div class="search__chip"></div></div>' +
+        '<div class="search__chips"><div class="search__chip"></div><div class="search__chip"></div>' +
+          '<div class="search__chip"></div><div class="search__chip"></div></div>' +
         '<div class="search__kb">' + keyboardHtml() + '</div>' +
         '<p class="search__note"></p><div class="search__rows"></div>' +
       '</div></div>' +
@@ -108,9 +120,12 @@
       open: false,
       q: '',
       at: 'kb',                // 'chips' | 'kb' | 'pick' (a filter's list) | 'rows' (a result)
-      chip: 0,                 // 0 Categoria, 1 Ano
+      chip: 0,                 // 0 Categoria, 1 Ano, 2 Nota, 3 Só streaming
       kr: 0, kc: 0,            // the focused key
-      cat: null, year: null,   // the chosen filter options (null: Todas / Qualquer)
+      cat: null, year: null, rating: null,   // the chosen filter options (null: Todas / Qualquer)
+      stream: true,            // Só streaming: only titles on an app of this TV
+      ready: true,             // false until the first streaming checks of an answer are in
+      failed: {},              // titles whose check failed (left out)
       stepYear: THIS_YEAR,     // the year of the "one year" line
       pick: null,              // the open filter list: { kind, items, i, top }
       rows: [], r: 0, col: [], first: [],
@@ -128,7 +143,9 @@
       return {
         text: s.q.replace(/\s+/g, ' ').replace(/^ | $/g, ''),
         cat: s.cat ? s.cat.cat : null,
-        year: s.year ? s.year.year : null
+        year: s.year ? s.year.year : null,
+        rating: s.rating ? s.rating.min : null,
+        stream: s.stream && opts.streamIds().length ? opts.streamIds() : null
       };
     }
 
@@ -137,10 +154,15 @@
     function paintChips() {
       el.chips[0].innerHTML = 'Categoria: <b>' + escapeHtml(s.cat ? s.cat.name : 'Todas') + '</b>';
       el.chips[1].innerHTML = 'Ano: <b>' + escapeHtml(s.year ? s.year.name : 'Qualquer') + '</b>';
+      el.chips[2].innerHTML = 'Nota: <b>' + escapeHtml(s.rating ? s.rating.name : 'Qualquer') + '</b>';
+      el.chips[3].innerHTML = 'Só streaming: <b>' + (s.stream ? 'Sim' : 'Não') + '</b>';
       el.chips[0].classList.toggle('is-set', !!s.cat);
       el.chips[1].classList.toggle('is-set', !!s.year);
+      el.chips[2].classList.toggle('is-set', !!s.rating);
+      el.chips[3].classList.toggle('is-set', !s.stream);
       // The filters in the query bar too: the chips scroll away with the keyboard.
-      el.sum.textContent = [s.cat && s.cat.name, s.year && s.year.name].filter(Boolean).join(' · ');
+      el.sum.textContent = [s.cat && s.cat.name, s.year && s.year.name, s.rating && 'Nota ' + s.rating.name,
+        !s.stream && 'Também fora do streaming'].filter(Boolean).join(' · ');
     }
 
     function setQuery(q) {
@@ -157,9 +179,10 @@
       clearTimeout(s.timer);
       s.seq++;
       var f = filter();
-      if (!f.text && !f.cat && !f.year) { s.res = null; s.loading = false; buildRows(); return; }
+      cancelChecks();
+      if (!f.text && !f.cat && !f.year && !f.rating) { s.res = null; s.loading = false; buildRows(); return; }
       var hit = opts.catalog.searchKnown(f);
-      if (hit) { s.res = hit; s.loading = false; buildRows(); return; }
+      if (hit) { s.res = hit; s.loading = false; startChecks(); buildRows(); return; }
       s.loading = true;
       note();
       s.timer = setTimeout(run, now ? 0 : WAIT);
@@ -171,6 +194,7 @@
         if (seq !== s.seq || !s.open) return;         // an older query: its answer is dropped
         s.res = res;
         s.loading = false;
+        startChecks();
         buildRows();
       }, function (err) {
         if (seq !== s.seq) return;
@@ -207,6 +231,11 @@
       return list;
     }
 
+    function ratingOptions() {
+      return [{ key: 'any', name: 'Qualquer', min: null }, { key: 'r6', name: '6+', min: 6 }, { key: 'r7', name: '7+', min: 7 },
+        { key: 'r75', name: '7,5+', min: 7.5 }, { key: 'r8', name: '8+', min: 8 }];
+    }
+
     function oneYear() { return { key: 'one', name: String(s.stepYear), year: { from: s.stepYear, to: s.stepYear } }; }
 
     function pickLabel(o) {
@@ -215,8 +244,8 @@
     }
 
     function openPick(kind) {
-      var items = kind === 'cat' ? catOptions() : yearOptions();
-      var cur = kind === 'cat' ? s.cat : s.year, at = 0;
+      var items = kind === 'cat' ? catOptions() : kind === 'year' ? yearOptions() : ratingOptions();
+      var cur = kind === 'cat' ? s.cat : kind === 'year' ? s.year : s.rating, at = 0;
       items.forEach(function (o, j) { if (cur && o.key === cur.key) at = j; });
       s.pick = { kind: kind, items: items, i: at, top: 0 };
       el.pickList.innerHTML = items.map(function (o) { return '<div class="pick__item">' + pickLabel(o) + '</div>'; }).join('');
@@ -256,7 +285,8 @@
       var p = s.pick, o = p.items[p.i];
       if (o.stepper) o = oneYear();
       if (p.kind === 'cat') s.cat = o.cat ? o : null;
-      else s.year = o.year ? o : null;
+      else if (p.kind === 'year') s.year = o.year ? o : null;
+      else s.rating = o.min ? o : null;
       closePick();
       paintChips();
       changed(true);
@@ -274,14 +304,14 @@
     // ---------- result rows ----------
 
     // The rows for what is asked: a person's titles, the answer for the query and filters,
-    // or (nothing asked) the "em alta" rows of the home screen. keepKey: focus that card.
-    function buildRows(keepKey) {
+    // or (nothing asked) the "em alta" rows of the home screen.
+    function computeRows() {
       var f = filter(), rows;
       if (s.person) {
         rows = Smart.searchRows(s.person.res, opts.isWatched, opts.hideAnime, null).map(function (r) {
           return { id: r.id, title: LABEL[r.id] + ' com ' + s.person.item.title, items: r.items };
         });
-      } else if (!f.text && !f.cat && !f.year) {
+      } else if (!f.text && !f.cat && !f.year && !f.rating) {
         rows = (opts.suggestions() || []).map(function (r) {
           return { id: r.id, title: r.title, items: r.items.filter(function (it) { return !opts.isWatched(it.key); }) };
         });
@@ -290,8 +320,22 @@
           return { id: r.id, title: LABEL[r.id], items: r.items };
         });
       }
+      if (checking()) {
+        rows = !s.ready ? [] : rows.map(function (r) {
+          if (r.id !== 'people') r.items = streamPrefix(r.items);
+          return r;
+        });
+      }
       rows = rows.filter(function (r) { return r.items.length; });
       rows.forEach(function (r) { r.items = r.items.slice(0, PER_ROW); });
+      return rows;
+    }
+
+    // keepKey: focus that card.
+    function buildRows(keepKey) { apply(computeRows(), keepKey); }
+
+    function apply(rows, keepKey) {
+      if (s.person && s.person.jump && rows.length) { s.person.jump = false; s.at = 'rows'; s.r = 0; }
       s.rows = rows;
       s.col = [];
       s.first = [];
@@ -316,10 +360,127 @@
       else if (s.rows.length) t = '';
       else if (s.loading) t = 'Buscando…';
       else if (s.res && s.res.failed) t = 'Sem conexão para buscar.';
-      else if (f.text || f.cat || f.year) {
-        t = 'Nada encontrado' + (f.text ? ' para “' + f.text + '”' : '') + (f.cat || f.year ? ' com estes filtros' : '') + '.';
+      else if (checking() && (!s.ready || look.queue.length || look.running)) t = 'Procurando onde assistir…';
+      else if (f.text || f.cat || f.year || f.rating) {
+        t = 'Nada encontrado' + (f.text ? ' para “' + f.text + '”' : '') + (f.cat || f.year || f.rating ? ' com estes filtros' : '') +
+          (f.stream ? ' nos seus apps de streaming' : '') + '.';
       } else t = 'Digite o nome de um filme, série ou pessoa, ou escolha uma categoria e um ano.';
       el.note.textContent = t;
+    }
+
+    // ---------- Só streaming: which app a search result is on ----------
+
+    var look = { queue: [], running: 0, seq: 0, done: 0, first: 0, timer: null };
+
+    // Titles are checked with text (TMDB's search cannot filter by service) and for a
+    // person's titles; with filters only, TMDB's discover already did it.
+    function checking() {
+      var f = filter();
+      return !!f.stream && !!(s.person || f.text);
+    }
+
+    // A row's titles in order, up to the first one not checked yet; those on no app of this
+    // TV (or whose check failed) are left out.
+    function streamPrefix(items) {
+      var out = [];
+      for (var i = 0; i < items.length; i++) {
+        if (s.failed[items[i].key]) continue;
+        var apps = opts.appsOf(items[i]);
+        if (apps === null) break;
+        if (apps.length) out.push(items[i]);
+      }
+      return out;
+    }
+
+    function cancelChecks() {
+      look.seq++;
+      look.queue = [];
+      clearTimeout(look.timer);
+      look.timer = null;
+      s.ready = true;
+    }
+
+    // An answer arrived: queue the titles whose apps are not known, films and series in turn,
+    // in the answer's order.
+    function startChecks() {
+      cancelChecks();
+      if (!checking()) return;
+      var src = s.person ? s.person.res : s.res;
+      var lists = Smart.searchRows(src, opts.isWatched, opts.hideAnime, s.person ? null : filter())
+        .filter(function (r) { return r.id !== 'people'; })
+        .map(function (r) {
+          return r.items.filter(function (it) { return opts.appsOf(it) === null && !s.failed[it.key]; });
+        });
+      for (var i = 0; i < 40; i++) lists.forEach(function (l) { if (l[i]) look.queue.push(l[i]); });
+      look.done = 0;
+      look.first = Math.min(FIRST_BATCH, look.queue.length);
+      s.ready = look.first === 0;
+      pumpLook();
+    }
+
+    function pumpLook() {
+      while (look.running < LOOK_PARALLEL && look.queue.length) checkOne(look.queue.shift());
+    }
+
+    function checkOne(it) {
+      var seq = look.seq;
+      look.running++;
+      opts.lookup(it).then(null, function (err) {
+        console.warn('search: apps of', it.key, err);
+        s.failed[it.key] = true;
+      }).then(function () {
+        look.running--;
+        if (seq === look.seq) {
+          look.done++;
+          if (!s.ready && look.done >= look.first) s.ready = true;
+          if (s.ready && !look.timer) look.timer = setTimeout(grow, 120);   // a few answers per update
+        }
+        pumpLook();
+      });
+    }
+
+    // New checks are in: cards are added at the ends of the rows (the rows are rebuilt, focus
+    // kept, only when a whole row appears).
+    function grow() {
+      look.timer = null;
+      if (!s.open) return;
+      var old = s.rows, cur = focused();
+      var rows = computeRows();
+      var same = rows.length === old.length && rows.every(function (r, i) {
+        var o = old[i];
+        if (o.id !== r.id || r.items.length < o.items.length) return false;
+        for (var c = 0; c < o.items.length; c++) if (o.items[c].key !== r.items[c].key) return false;
+        return true;
+      });
+      if (!same) { apply(rows, cur && cur.key); return; }
+      rows.forEach(function (r, i) {
+        if (r.items.length === old[i].items.length) return;
+        old[i].items = r.items;
+        s.mounted[i].first = -1;          // syncCards adds the new cards of the window
+      });
+      relabel();
+      note();
+      schedule();
+    }
+
+    // The app's name on a card (top left), once it is known; not over the "Na lista" badge.
+    function label(node, it) {
+      if (node.appLabel || !it) return;
+      var apps = opts.appsOf(it);
+      if (!apps || !apps.length || node.querySelector('.poster__badge')) return;
+      var t = document.createElement('span');
+      t.className = 'poster__app';
+      t.textContent = apps[0].name + (apps.length > 1 ? ' +' + (apps.length - 1) : '');
+      node.firstChild.appendChild(t);
+      node.appLabel = true;
+    }
+
+    function relabel() {
+      s.mounted.forEach(function (m, i) {
+        var row = s.rows[i];
+        if (!row || row.id === 'people') return;
+        Object.keys(m.cards).forEach(function (c) { label(m.cards[c], row.items[c]); });
+      });
     }
 
     function personNode(p) {
@@ -367,6 +528,7 @@
       for (var c = lo; c < hi; c++) {
         if (m.cards[c]) continue;
         var n = row.id === 'people' ? personNode(row.items[c]) : opts.cardNode(row.items[c]);
+        if (row.id !== 'people') label(n, row.items[c]);
         n.style.transform = tr(c * STEP, 0);
         m.track.appendChild(n);
         m.cards[c] = n;
@@ -437,6 +599,7 @@
       s.open = false;
       clearTimeout(s.timer);
       s.seq++;
+      cancelChecks();
       if (s.pick) { s.pick = null; el.pick.hidden = true; swap('pickFocus', null); }
       root.hidden = true;
     }
@@ -471,7 +634,8 @@
     // handles short and long presses there).
     function press() {
       if (s.at === 'kb') key(KEYS[s.kr][s.kc]);
-      else if (s.at === 'chips') openPick(s.chip ? 'year' : 'cat');
+      else if (s.at === 'chips' && s.chip === 3) { s.stream = !s.stream; paintChips(); changed(true); }
+      else if (s.at === 'chips') openPick(['cat', 'year', 'rating'][s.chip]);
       else if (s.at === 'pick') choosePick();
       else return false;
       return true;
@@ -491,7 +655,10 @@
       opts.catalog.personTitles(p).then(function (res) {
         if (seq !== s.seq || !s.open) return;
         s.person = { item: p, res: res, key: p.key };
+        startChecks();
         buildRows();
+        // Not checked yet: the titles show (and take the focus) when the first checks are in.
+        if (!s.ready) { s.person.jump = true; s.at = 'kb'; schedule(); return; }
         if (s.rows.length) { s.at = 'rows'; s.r = 0; schedule(); return; }
         opts.toast('Nenhum título de ' + p.title + ' para mostrar');
         leavePerson();
@@ -504,6 +671,7 @@
     function leavePerson() {
       var k = s.person.key;
       s.person = null;
+      startChecks();
       buildRows(k);
     }
 

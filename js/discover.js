@@ -149,8 +149,11 @@
 
     // ---------- DOM: mounted rows and card windows ----------
 
+    // The score sits on the card, top right ("★ 7,8"): text drawn with the card, no layer of
+    // its own (Smart.cardScore leaves it out for titles with no score or too few votes).
     function cardNode(it) {
       var st = opts.statusOf(it.key);
+      var score = Smart.cardScore(it);
       var pal = typeof it.palette === 'number' ? it.palette : (it.id % 8);
       var d = document.createElement('div');
       d.className = 'poster';
@@ -160,7 +163,8 @@
         '<span class="poster__kind">' + typeLabel(it.type) + '</span>' +
         '<span class="poster__title">' + escapeHtml(it.title) + '</span></div>' +
         (it.poster ? '<img class="poster__img" alt="" src="' + escapeHtml(posterUrl(it.poster)) + '">' : '') +
-        (st === 'want' ? '<span class="poster__badge">Na lista</span>' : '') + '</div>' +
+        (st === 'want' ? '<span class="poster__badge">Na lista</span>' : '') +
+        (score ? '<span class="poster__score">' + score + '</span>' : '') + '</div>' +
         '<div class="poster__cap">' + escapeHtml(it.title) + '</div>';
       var img = d.querySelector('img');
       if (img) {

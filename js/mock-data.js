@@ -109,6 +109,10 @@
   titles.push({ id: 209867, type: 'tv', title: 'Frieren e a Jornada para o Além', year: 2023, genres: [16, 10759, 10765], rating: 8.8, votes: 600, popularity: 90, seasons: 1, palette: 1, providers: [NETFLIX], lang: 'ja', countries: ['JP'],
     overview: 'Depois de derrotar o Rei Demônio, uma maga elfa revisita os lugares da jornada e descobre o que a amizade com os companheiros significou.' });
 
+  // Not on any streaming service in Brazil: "Só streaming" leaves it out of the search.
+  titles.push({ id: 515195, type: 'movie', title: 'Bacurau', year: 2019, genres: [18, 53, 878], rating: 7.2, votes: 900, popularity: 30, runtime: 131, palette: 4, providers: [],
+    overview: 'Pouco depois da morte da matriarca, os moradores de um povoado do sertão percebem que a comunidade sumiu do mapa e que estranhos estão por perto.' });
+
   // People for the search screen ("Pessoas"); credits are keys of the titles above.
   var people = [
     { id: 1, name: 'Fernanda Torres', dept: 'Acting', palette: 2, credits: ['movie:1000837'] },

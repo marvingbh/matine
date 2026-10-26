@@ -636,6 +636,36 @@ body[data-zone="details"] #discover { opacity: 0; }
   font-weight: 600;
   color: var(--warm);
 }
+/* The TMDB score, top right: a dark pill painted with the card (no layer, no blur). */
+.poster__score {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: rgba(10, 12, 16, 0.78);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #ffffff;
+}
+/* The app a search result is on, top left (js/search.js; not with "Na lista"). */
+.poster__app {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  max-width: 112px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(10, 12, 16, 0.78);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* The title under the focused card only. */
 .poster__cap {
   position: absolute;
@@ -973,7 +1003,9 @@ body[data-view="ids"] #mock-badge { display: none; }
   position: absolute;
   top: 0; right: 0; bottom: 0; left: 0;
   z-index: 4;
-  background: rgba(16, 17, 21, 0.98);
+  /* Opaque: nothing of the home screen shows through, and the layer is the cheapest to
+     composite (no blending with what is under it). */
+  background: #101115;
   will-change: opacity;
   animation: search-in 160ms linear;
 }
@@ -1030,7 +1062,7 @@ body[data-zone="details"] #search { opacity: 0; }
 .search__chips { position: absolute; left: 0; top: 0; white-space: nowrap; }
 .search__chip {
   display: inline-block;
-  width: 384px;
+  width: 352px;
   height: 56px;
   margin-right: 16px;
   padding: 0 24px;

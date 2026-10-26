@@ -522,9 +522,7 @@
     onBackdrop: function (url) { showBackground(url || landscape()); },
     preload: function (url) { preload(url); },
     appsOf: appsOf,
-    learn: function (item, providers) {
-      state.appsOf[item.key] = Smart.mapProviders(providers, DATA.curated, state.installed).map(function (a) { return a.key; });
-    },
+    learn: learnApps,
     appByKey: function (k) { return state.byKey[k] || null; },
     usage: function (k) { return (state.profile && state.profile.appScore[k]) || 0; },
     statusOf: function (k) { return Smart.statusOf(state.history, k); },
@@ -558,6 +556,16 @@
     catalog: Catalog,
     cardNode: discover.cardNode,
     isWatched: function (k) { return Smart.statusOf(state.history, k) === 'watched'; },
+    // Só streaming: "on an app of this TV" (the apps the rows use), not any service in Brazil.
+    appsOf: appsOf,
+    lookup: function (it) {
+      var known = appsOf(it);
+      if (known) return Promise.resolve(known);
+      // The details request (cached 6 h, reused by the details screen), without its extras
+      // (IMDb, Wikidata): only the providers are needed here.
+      return Catalog.details(it).then(function (d) { learnApps(it, d.providers); return appsOf(it) || []; });
+    },
+    streamIds: function () { return Smart.providerIdsFor(DATA.curated, state.installed); },
     hideAnime: CFG.hideAnime !== false,
     genres: function () { return state.genres; },
     // With nothing typed: the "em alta" rows of the home screen (no network).
@@ -567,11 +575,12 @@
 
   var searchOk = false;      // an OK keyup since the search opened: the press that opened it does not type
 
-  function openSearch() {
+  // byOk: opened with OK (the Buscar pill), whose keyup is still to come.
+  function openSearch(byOk) {
     closeInputs();
     state.searchFrom = state.zone === 'inputs' ? 'bar' : state.zone;
     state.zone = 'search';
-    searchOk = false;
+    searchOk = !byOk;
     search.open();
     updateFocus();
   }
@@ -630,6 +639,11 @@
       search.type(ch);
     }
     return true;
+  }
+
+  // A title's TMDB providers (from its details) -> the installed apps it is on.
+  function learnApps(item, providers) {
+    state.appsOf[item.key] = Smart.mapProviders(providers, DATA.curated, state.installed).map(function (a) { return a.key; });
   }
 
   // Installed apps a title is on, most used first; null while not known yet.
@@ -1268,7 +1282,7 @@
   }
 
   function barAction(a) {
-    if (a === 'search') { openSearch(); return; }
+    if (a === 'search') { openSearch(true); return; }
     if (a === 'inputs') { openInputs(); return; }
     if (a === 'settings') { menuAction({ action: 'settings' }); return; }
     toast('Abrindo as configurações de rede…');

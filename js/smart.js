@@ -123,7 +123,7 @@
       key: item.key, id: item.id, type: item.type, title: item.title, year: item.year || '',
       poster: item.poster || '', backdrop: item.backdrop || '', palette: item.palette,
       overview: String(item.overview || '').slice(0, 320),
-      genreIds: (item.genreIds || []).slice(0, 6), rating: item.rating || 0
+      genreIds: (item.genreIds || []).slice(0, 6), rating: item.rating || 0, votes: item.votes || 0
     };
   }
 
@@ -379,10 +379,22 @@
     return out.sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR'); });
   }
 
+  // A score means something only with enough votes: the "Nota" filter (and TMDB discover with
+  // vote_average.gte) asks this many, so obscure 10/10 titles stay out.
+  function minVotes(type) { return type === 'tv' ? 50 : 100; }
+
+  // The score on a poster card ("★ 7,8"), or '' when there is none or too few votes. Older
+  // history records have no vote count: their score is shown.
+  function cardScore(it) {
+    if (!it || !it.rating || (typeof it.votes === 'number' && it.votes < 50)) return '';
+    return '★ ' + formatRating(it.rating);
+  }
+
   // Does a title pass the search filter? filter: { cat: { movie, tv } | null,
-  // year: { from, to } | null } (years, either end may be null).
+  // year: { from, to } | null (years, either end may be null), rating: minimum score | null }.
   function passesFilter(it, filter) {
     if (!filter) return true;
+    if (filter.rating && ((it.rating || 0) < filter.rating || (it.votes || 0) < minVotes(it.type))) return false;
     if (filter.cat) {
       var g = filter.cat[it.type];
       if (!g || (it.genreIds || []).indexOf(g) === -1) return false;
@@ -408,7 +420,7 @@
       seen[it.key] = true;
       by[it.type].push(it);
     });
-    var filtered = filter && (filter.cat || filter.year);
+    var filtered = filter && (filter.cat || filter.year || filter.rating);
     var people = filtered ? [] : ((res && res.people) || []).filter(function (p) {
       return !hideAnime || !p.known || !p.known.length || !p.known.every(isAnime);
     });
@@ -461,6 +473,8 @@
     isAnime: isAnime,
     dropAnime: dropAnime,
     searchCategories: searchCategories,
+    minVotes: minVotes,
+    cardScore: cardScore,
     passesFilter: passesFilter,
     searchRows: searchRows,
     formatRating: formatRating,

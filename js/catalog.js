@@ -235,13 +235,14 @@
   // Asked while the user types, so the answers are kept in memory only (every prefix in
   // localStorage would crowd out the row cache) and the requests go to the front of the
   // queue, before the background work. f: { text, cat: { movie, tv } | null,
-  // year: { from, to } | null }.
+  // year: { from, to } | null, rating: minimum score | null, stream: [provider ids] | null }.
   //   text, no filter:   /search/multi (films, series and people in one answer)
   //   text and filter:   /search/movie + /search/tv (one year: primary_release_year /
-  //                      first_air_date_year); the genre and a range of years are checked on
-  //                      the answer (Smart.searchRows)
-  //   no text, filter:   /discover/movie + /discover/tv by popularity, with with_genres and
-  //                      the release dates, without the anime keyword
+  //                      first_air_date_year); the genre, a range of years and the score are
+  //                      checked on the answer (Smart.searchRows), streaming by js/search.js
+  //   no text, filter:   /discover/movie + /discover/tv by popularity, with with_genres, the
+  //                      release dates, vote_average.gte, without the anime keyword, and
+  //                      (Só streaming) only titles on the TV's apps in Brazil
   // A type the category does not exist for (a TV-only genre) is not asked.
   var live = {}, liveKeys = [];
   var LIVE_MAX = 60;
@@ -274,8 +275,15 @@
     p.with_genres = f.cat ? f.cat[type] : '';
     p[date + '.gte'] = y.from ? y.from + '-01-01' : '';
     p[date + '.lte'] = y.to ? y.to + '-12-31' : '';
-    p['vote_count.gte'] = 20;          // no empty pages of unknown titles
+    // No pages of unknown titles; with "Nota", enough votes for the score to mean something.
+    p['vote_count.gte'] = f.rating ? window.Smart.minVotes(type) : 20;
+    p['vote_average.gte'] = f.rating || '';
     p.without_keywords = HIDE_ANIME ? ANIME_KEYWORD : '';
+    if (f.stream && f.stream.length) {
+      p.watch_region = REGION;
+      p.with_watch_monetization_types = 'flatrate|free|ads';
+      p.with_watch_providers = f.stream.join('|');
+    }
     return p;
   }
 
@@ -299,7 +307,7 @@
   }
 
   function searchTmdb(f) {
-    if (f.text && !f.cat && !f.year) {
+    if (f.text && !f.cat && !f.year && !f.rating) {
       return tmdbLive('/search/multi', { language: LANG, query: f.text, include_adult: 'false', page: 1 }, shapeSearch);
     }
     return Promise.all(searchTypes(f).map(function (t) {
@@ -403,9 +411,13 @@
   function searchMock(f) {
     var q = window.Smart.norm(f.text || '');
     function has(name) { return window.Smart.norm(name).indexOf(q) !== -1; }
-    var items = MOCK.titles.filter(function (t) { return !q || has(t.title); })
+    var stream = !q && f.stream && f.stream.length ? f.stream : null;      // discover mode
+    var items = MOCK.titles.filter(function (t) {
+      if (stream && !t.providers.some(function (p) { return stream.indexOf(p) !== -1; })) return false;
+      return !q || has(t.title);
+    })
       .sort(function (a, b) { return b.popularity - a.popularity; }).map(mockItem);
-    var people = q && !f.cat && !f.year ? MOCK.people.filter(function (p) { return has(p.name); }).map(mockPerson) : [];
+    var people = q && !f.cat && !f.year && !f.rating ? MOCK.people.filter(function (p) { return has(p.name); }).map(mockPerson) : [];
     return Promise.resolve({ items: items, people: people });
   }
 
@@ -483,7 +495,8 @@
   // filter set back) shows its results at once, without waiting for the debounce.
   var answers = {}, answerKeys = [];
   function searchKey(f) {
-    return JSON.stringify([f.text || '', f.cat ? [f.cat.movie, f.cat.tv] : 0, f.year ? [f.year.from, f.year.to] : 0]);
+    return JSON.stringify([f.text || '', f.cat ? [f.cat.movie, f.cat.tv] : 0, f.year ? [f.year.from, f.year.to] : 0,
+      f.rating || 0, f.stream ? f.stream.join('|') : 0]);
   }
   function search(f) {
     if (mode === 'off') return Promise.resolve({ items: [], people: [] });

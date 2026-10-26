@@ -333,6 +333,30 @@ test('search filter: category per type, single year and ranges; no people with a
   assert.deepStrictEqual(keys({ cat: null, year: { from: 2024, to: 2024 } }), ['1']);
 });
 
+test('search filter "Nota": minimum score with enough votes (100 for films, 50 for series)', function () {
+  var res = { items: [
+    item('movie', 1, 'Bom', [18], { rating: 7.6, votes: 5000 }), item('movie', 2, 'Obscuro 10', [18], { rating: 10, votes: 12 }),
+    item('movie', 3, 'Mediano', [18], { rating: 6.4, votes: 900 }), item('tv', 4, 'Série boa', [18], { rating: 8.1, votes: 60 }),
+    item('tv', 5, 'Série nova', [18], { rating: 9, votes: 40 })
+  ], people: [{ key: 'person:1', type: 'person', title: 'X' }] };
+  function ids(min) {
+    return Smart.searchRows(res, null, true, { rating: min }).map(function (r) { return r.items.map(function (x) { return x.id; }).join(','); });
+  }
+  assert.deepStrictEqual(ids(7), ['1', '4'], 'no people row with a filter');
+  assert.deepStrictEqual(ids(8), ['4']);
+  assert.deepStrictEqual(ids(6), ['1,3', '4']);
+  assert.strictEqual(Smart.minVotes('movie'), 100);
+  assert.strictEqual(Smart.minVotes('tv'), 50);
+});
+
+test('poster score: one decimal, hidden with no score or few votes', function () {
+  assert.strictEqual(Smart.cardScore({ rating: 7.84, votes: 3000 }), '★ 7,8');
+  assert.strictEqual(Smart.cardScore({ rating: 9.5, votes: 12 }), '');
+  assert.strictEqual(Smart.cardScore({ rating: 0, votes: 3000 }), '');
+  assert.strictEqual(Smart.cardScore({ rating: 8 }), '★ 8,0', 'older history records have no vote count');
+  assert.strictEqual(Smart.cardScore(null), '');
+});
+
 test('search categories: one per genre, with its film and TV id; TV-only genres apart', function () {
   var cats = Smart.searchCategories({
     movie: { 28: 'Ação', 12: 'Aventura', 18: 'Drama', 27: 'Terror', 878: 'Ficção científica' },
@@ -443,6 +467,33 @@ testAsync('catalog search: no text + filters -> /discover with genres, dates and
       var more = t.urls.slice(n);
       assert.strictEqual(more.length, 1, more.join(' '));
       assert.ok(/\/discover\/tv\?/.test(more[0]) && /first_air_date\.lte=1989-12-31/.test(more[0]) && more[0].indexOf('first_air_date.gte') === -1, more[0]);
+    });
+  });
+});
+
+testAsync('catalog search: filters only + Nota + Só streaming -> discover on the TV apps in BR', function () {
+  var t = catalogWith({ tmdbToken: 'test' }, { results: [] });
+  return t.Catalog.search({ text: '', cat: null, year: null, rating: 7, stream: [8, 337] }).then(function () {
+    var mv = t.urls.filter(function (u) { return u.indexOf('/discover/movie?') !== -1; })[0];
+    var tv = t.urls.filter(function (u) { return u.indexOf('/discover/tv?') !== -1; })[0];
+    assert.ok(/vote_average\.gte=7(&|$)/.test(mv) && /vote_count\.gte=100(&|$)/.test(mv), mv);
+    assert.ok(/vote_count\.gte=50(&|$)/.test(tv), tv);
+    assert.ok(/watch_region=BR/.test(mv) && /with_watch_providers=8%7C337/.test(mv), mv);
+    assert.ok(/with_watch_monetization_types=flatrate%7Cfree%7Cads/.test(tv), tv);
+    var n = t.urls.length;
+    return t.Catalog.search({ text: '', cat: null, year: { from: 2020, to: 2029 }, rating: null, stream: null }).then(function () {
+      var u = t.urls.slice(n).join(' ');
+      assert.ok(u.indexOf('watch_region') === -1 && u.indexOf('vote_average') === -1 && /vote_count\.gte=20/.test(u), u);
+    });
+  });
+});
+
+testAsync('catalog search: text + Nota -> /search/movie and /search/tv (score checked on the answer)', function () {
+  var t = catalogWith({ tmdbToken: 'test' }, { results: [] });
+  return t.Catalog.search({ text: 'casa', cat: null, year: null, rating: 8, stream: [8] }).then(function () {
+    assert.strictEqual(t.urls.length, 2, t.urls.join(' '));
+    t.urls.forEach(function (u) {
+      assert.ok(/\/search\/(movie|tv)\?/.test(u) && u.indexOf('vote_average') === -1 && u.indexOf('watch_providers') === -1, u);
     });
   });
 });
