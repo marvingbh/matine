@@ -2,7 +2,7 @@
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
         id="http://example.local/TvHome" version="1.0.0" viewmodes="maximized">
     <tizen:application id="TvHome0001.Home" package="TvHome0001" required_version="6.0"/>
-    <name>Início</name>
+    <name>Matinê</name>
     <description>Tela inicial com os apps de streaming instalados, sugestões de filmes e séries e o clima.</description>
     <icon src="icon.png"/>
     <content src="index.html"/>

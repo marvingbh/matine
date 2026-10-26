@@ -4,10 +4,10 @@
   "vendor": "Marcus",
   "type": "web",
   "main": "index.html",
-  "title": "Início",
+  "title": "Matinê",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
-  "iconColor": "#3b2a5c",
+  "iconColor": "#22225c",
   "resolution": "1920x1080",
   "disableBackHistoryAPI": true,
   "requiredACG": [

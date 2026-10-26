@@ -1,51 +1,42 @@
 #!/usr/bin/env python3
-"""Generate icon.png: a valley at dusk (warm sun low between two mountain ranges under
-an indigo sky), in the colours of the default background photo.
+"""Generate the Matinê icons: a warm sun rising behind a low ridge (Belo Horizonte's
+"beautiful horizon"), under a sky that goes from deep night blue to rose and amber. The
+dark ground under the horizon is a film strip: a row of perforations runs along its top
+edge, so the horizon line doubles as the edge of a film. Flat with depth, tvOS style: a
+soft glow round the sun, a thin warm rim light on the horizon. No text.
 
-512x423, 24-bit RGB, full bleed: Samsung's TV app icon spec (developer.samsung.com,
-"App Icons and Screenshots"). The TV may round the corners with a squircle mask, so
-the sun and the peaks stay well inside the edges.
+Sizes (each drawn for its own shape, not cropped):
+  icon.png              512x423, 24-bit RGB, full bleed: Samsung's TV app icon spec
+                        (developer.samsung.com, "App Icons and Screenshots"). The TV may
+                        round the corners with a squircle mask, so everything important
+                        stays well inside the edges.
+  webos/icon.png        80x80   LG launcher icon (webos/appinfo.json "icon")
+  webos/largeIcon.png   130x130 LG large icon ("largeIcon")
 
 Needs Pillow (pip install pillow). Drawn at 4x and scaled down for smooth edges.
-
-Also writes the LG webOS launcher icons, webos/icon.png (80x80) and webos/largeIcon.png
-(130x130): a centred square crop of icon.png. `python3 tools/make_icon.py --webos` makes
-only those, from the existing icon.png."""
+`python3 tools/make_icon.py --preview DIR` also writes previews into DIR."""
 import os
 import sys
 from PIL import Image, ImageDraw, ImageFilter
 
-W, H = 512, 423
 S = 4                                   # supersampling factor
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
-OUT = os.path.join(ROOT, 'icon.png')
 
-
-def webos_icons(src):
-    """Square centre crop of the Samsung icon, scaled to LG's 80x80 and 130x130."""
-    w, h = src.size
-    side = min(w, h)
-    sq = src.crop(((w - side) // 2, (h - side) // 2, (w - side) // 2 + side, (h - side) // 2 + side))
-    os.makedirs(os.path.join(ROOT, 'webos'), exist_ok=True)
-    for name, size in (('icon.png', 80), ('largeIcon.png', 130)):
-        sq.resize((size, size), Image.LANCZOS).save(os.path.join(ROOT, 'webos', name), optimize=True)
-
-
-if '--webos' in sys.argv:
-    webos_icons(Image.open(OUT).convert('RGB'))
-    sys.exit(0)
-
-SKY = [(0.00, (20, 20, 56)),            # deep indigo at the top
-       (0.34, (82, 48, 128)),           # violet
-       (0.56, (196, 88, 110)),          # rose
-       (0.70, (250, 150, 88))]          # orange glow at the horizon
-SUN = (255, 222, 160)
-BACK = (92, 58, 112)                    # far range, hazy purple
-MID = (60, 38, 78)                      # middle range
-FRONT = (26, 19, 40)                    # near range, almost black
+SKY = [(0.00, (10, 14, 44)),            # deep night blue at the top
+       (0.32, (34, 34, 96)),            # indigo
+       (0.52, (122, 60, 128)),          # plum
+       (0.62, (226, 102, 112)),         # rose
+       (0.66, (255, 168, 90))]          # amber at the horizon
+SUN = (255, 226, 166)
+SUN_EDGE = (255, 186, 112)
+RIDGE = (58, 36, 86)                    # the low ridge in front of the sun
+GROUND = (16, 18, 44)                   # the film strip
+HOLE = (52, 50, 100)                    # its perforations, a little lighter
+RIM = (255, 196, 128)                   # the warm line on the horizon
 
 
 def lerp(a, b, t):
+    t = max(0.0, min(1.0, t))
     return tuple(int(round(a[k] + (b[k] - a[k]) * t)) for k in range(3))
 
 
@@ -56,44 +47,105 @@ def sky_colour(t):
     return SKY[-1][1]
 
 
-def pts(points):
-    return [(x * S, y * S) for x, y in points]
+def draw(W, H):
+    """The icon at W x H (drawn at S times that, then scaled down)."""
+    w, h = W * S, H * S
+    m = min(w, h)
+    horizon = 0.70 * h
+    img = Image.new('RGB', (w, h))
+    d = ImageDraw.Draw(img)
+    for y in range(h):
+        d.line([(0, y), (w, y)], fill=sky_colour(y / horizon * 0.66))
+
+    # The sun: a soft glow, then the disc with a warmer lower half, half risen.
+    cx, r = w / 2, 0.25 * m
+    cy = horizon + 0.02 * h
+    glow = Image.new('L', (w, h), 0)
+    ImageDraw.Draw(glow).ellipse([cx - 1.7 * r, cy - 1.5 * r, cx + 1.7 * r, cy + 1.5 * r], fill=150)
+    glow = glow.filter(ImageFilter.GaussianBlur(0.6 * r))
+    img = Image.composite(Image.new('RGB', (w, h), (255, 150, 110)), img, glow)
+    sun = Image.new('RGB', (w, h))
+    sd = ImageDraw.Draw(sun)
+    for y in range(int(cy - r), int(cy + r) + 1):
+        sd.line([(0, y), (w, y)], fill=lerp(SUN, SUN_EDGE, (y - (cy - r)) / (1.3 * r)))
+    disc = Image.new('L', (w, h), 0)
+    ImageDraw.Draw(disc).ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
+    img = Image.composite(sun, img, disc)
+    d = ImageDraw.Draw(img)
+
+    # A low ridge in front of the sun: gentle, like the Serra do Curral.
+    ridge = [(0, horizon - 0.045 * h), (0.12 * w, horizon - 0.07 * h), (0.24 * w, horizon - 0.05 * h),
+             (0.33 * w, horizon - 0.035 * h), (0.42 * w, horizon - 0.015 * h), (0.58 * w, horizon - 0.012 * h),
+             (0.70 * w, horizon - 0.04 * h), (0.80 * w, horizon - 0.075 * h), (0.90 * w, horizon - 0.06 * h),
+             (w, horizon - 0.05 * h), (w, h), (0, h)]
+    d.polygon(ridge, fill=RIDGE)
+
+    # The ground is a film strip: a warm rim on the horizon, then a row of perforations.
+    band = horizon + 0.035 * h
+    d.rectangle([0, band, w, h], fill=GROUND)
+    d.rectangle([0, band, w, band + max(S, 0.008 * h)], fill=RIM)
+    hole_w, hole_h = 0.085 * m, 0.075 * m
+    gap = hole_w * 0.8
+    step = hole_w + gap
+    n = int(w // step) + 2
+    x0 = (w - (n * step - gap)) / 2
+    top = band + (h - band - hole_h) * 0.42
+    for i in range(n):
+        x = x0 + i * step
+        d.rounded_rectangle([x, top, x + hole_w, top + hole_h], radius=hole_h * 0.28, fill=HOLE)
+
+    # Depth: the strip darkens towards the bottom.
+    shade = Image.new('L', (w, h), 0)
+    sh = ImageDraw.Draw(shade)
+    for y in range(int(band), h):
+        sh.line([(0, y), (w, y)], fill=int(70 * (y - band) / (h - band)))
+    img = Image.composite(Image.new('RGB', (w, h), (6, 7, 18)), img, shade)
+    return img.resize((W, H), Image.LANCZOS)
 
 
-w, h = W * S, H * S
-img = Image.new('RGB', (w, h))
-d = ImageDraw.Draw(img)
-for y in range(h):
-    d.line([(0, y), (w, y)], fill=sky_colour(y / h))
+def save(img, rel):
+    path = os.path.join(ROOT, rel)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    img.save(path, optimize=True)
+    print('wrote', rel, img.size, os.path.getsize(path), 'bytes')
 
-# Sun with a soft glow: a blurred disc on its own mask, blended over the sky.
-sun_c, sun_r = (238, 262), 50
-glow = Image.new('L', (w, h), 0)
-g = ImageDraw.Draw(glow)
-g.ellipse([(sun_c[0] - 130) * S, (sun_c[1] - 130) * S, (sun_c[0] + 130) * S, (sun_c[1] + 130) * S], fill=120)
-glow = glow.filter(ImageFilter.GaussianBlur(60 * S))
-img = Image.composite(Image.new('RGB', (w, h), (255, 170, 110)), img, glow)
-d = ImageDraw.Draw(img)
-d.ellipse([(sun_c[0] - sun_r) * S, (sun_c[1] - sun_r) * S, (sun_c[0] + sun_r) * S, (sun_c[1] + sun_r) * S], fill=SUN)
 
-# Far range: low ridges with a Half Dome-like rounded peak right of the sun.
-d.polygon(pts([
-    (0, 292), (48, 270), (96, 284), (140, 266), (186, 290), (232, 296),
-    (274, 290), (302, 262), (318, 230), (336, 214), (356, 212), (370, 222),
-    (374, 252), (404, 276), (448, 266), (512, 286), (512, 423), (0, 423)]), fill=BACK)
+def rounded(img, radius_frac):
+    """The icon with rounded corners, as a launcher shows it (previews only)."""
+    w, h = img.size
+    mask = Image.new('L', (w * S, h * S), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, w * S - 1, h * S - 1], radius=int(min(w, h) * radius_frac * S), fill=255)
+    out = img.convert('RGBA')
+    out.putalpha(mask.resize((w, h), Image.LANCZOS))
+    return out
 
-# Middle range: a softer layer that sets the valley floor.
-d.polygon(pts([
-    (0, 318), (70, 300), (150, 316), (230, 330), (310, 322), (390, 306),
-    (460, 312), (512, 304), (512, 423), (0, 423)]), fill=MID)
 
-# Near range: steep walls framing the valley (El Capitan on the left).
-d.polygon(pts([
-    (0, 214), (30, 196), (72, 190), (98, 200), (114, 236), (138, 300),
-    (176, 350), (236, 374), (300, 372), (356, 352), (396, 318), (424, 280),
-    (452, 258), (486, 250), (512, 256), (512, 423), (0, 423)]), fill=FRONT)
+def previews(out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    big = draw(512, 423)
+    big.save(os.path.join(out_dir, 'icon-matine.png'))
+    for name, bg, fg in (('dark', (16, 17, 21), (235, 235, 240)), ('light', (236, 236, 240), (30, 30, 36))):
+        canvas = Image.new('RGB', (1200, 560), bg)
+        x = 60
+        for size, rad in (((400, 330), 0.12), ((200, 200), 0.22), ((130, 130), 0.22), ((80, 80), 0.22), ((48, 48), 0.22)):
+            icon = rounded(draw(*size), rad)
+            y = 60 + (330 - size[1]) // 2
+            canvas.paste(icon, (x, y), icon)
+            x += size[0] + 60
+        try:
+            from PIL import ImageFont
+            font = ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial.ttf', 28)
+        except (IOError, OSError):
+            font = None
+        ImageDraw.Draw(canvas).text((60, 440), 'Matinê  ·  512x423 (Samsung), 200, 130 (LG large), 80 (LG), 48', fill=fg, font=font)
+        canvas.save(os.path.join(out_dir, 'icon-matine-on-%s.png' % name))
+    print('previews in', out_dir)
 
-img = img.resize((W, H), Image.LANCZOS)
-img.save(OUT, optimize=True)
-print('wrote', os.path.normpath(OUT), os.path.getsize(OUT), 'bytes')
-webos_icons(img)
+
+if __name__ == '__main__':
+    if '--preview' in sys.argv:
+        previews(sys.argv[sys.argv.index('--preview') + 1])
+        sys.exit(0)
+    save(draw(512, 423), 'icon.png')
+    save(draw(80, 80), 'webos/icon.png')
+    save(draw(130, 130), 'webos/largeIcon.png')

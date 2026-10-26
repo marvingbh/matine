@@ -78,7 +78,7 @@
     { id: 'com.samsung.tv.settings', name: 'Configurações', show: false },
     { id: 'com.samsung.tv.notification-service', name: '', show: false },
     { id: 'org.tizen.homescreen-efl', name: 'Home', show: false },
-    { id: 'TvHome0001.Home', name: 'Início', show: true }
+    { id: 'TvHome0001.Home', name: 'Matinê', show: true }
   ];
 
   function normalizeInfo(a) {

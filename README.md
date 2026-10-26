@@ -1,6 +1,6 @@
-# TV Home
+# Matinê
 
-A home screen for a Samsung TV (QN50Q60DAGXZD, Tizen 9, Brazil), laid out like the Apple TV (tvOS) home screen: a Top Shelf at the top (the focused app's suggestions over their artwork, full bleed), a grid of app tiles below it (5 per row, the focused one lifts with a shadow and a sheen), and under the grid the film and series poster rows from TMDB: which app each one is on, a "Para você" row built from what you open and mark here, and a "Minha lista" view of what you are watching, want to see and have seen. The clock sits top right with the weather beside it. It is plain HTML, CSS and JS, with no build step. The same code also runs on LG webOS TVs (see "LG TVs (webOS)" below).
+*Matinê*: the afternoon cinema session, in Brazil. A home screen for a Samsung TV (QN50Q60DAGXZD, Tizen 9, Brazil), laid out like the Apple TV (tvOS) home screen: a Top Shelf at the top (the focused app's suggestions over their artwork, full bleed), a grid of app tiles below it (5 per row, the focused one lifts with a shadow and a sheen), and under the grid the film and series poster rows from TMDB: which app each one is on, a "Para você" row built from what you open and mark here, and a "Minha lista" view of what you are watching, want to see and have seen. The clock sits top right with the weather beside it. It is plain HTML, CSS and JS, with no build step. The same code also runs on LG webOS TVs (see "LG TVs (webOS)" below).
 
 ## What it does
 
@@ -101,8 +101,9 @@ Keys: arrows to move, Enter for the details (hold Enter to open the title in its
 - `img/*.jpg`: the six background photos, 1920x1080, each about 300 KB or less.
 - `mock/bd-*.jpg`: abstract backdrops for the sample catalogue (browser only; regenerate with `python3 tools/make_mock.py`).
 - `fonts/inter-latin-400.woff2`, `fonts/inter-latin-600.woff2`: Inter, Latin subset; `fonts/OFL.txt` is its licence.
-- `icon.png`: the launcher icon, a valley at dusk. 512x423, 24-bit RGB PNG, full bleed, as Samsung asks for TV app icons. Regenerate it with `python3 tools/make_icon.py` (needs Pillow).
-- `webos/appinfo.json`, `webos/icon.png` (80x80), `webos/largeIcon.png` (130x130): the LG package files. Make the icons with `python3 tools/make_icon.py --webos` (a square crop of `icon.png`).
+- `icon.png`: the launcher icon, a sun rising behind a low ridge (Belo Horizonte, "beautiful horizon") over a night-blue to amber sky; the dark ground under the horizon is a film strip, its perforations along the horizon. No text. 512x423, 24-bit RGB PNG, full bleed, as Samsung asks for TV app icons.
+- `webos/appinfo.json`, `webos/icon.png` (80x80), `webos/largeIcon.png` (130x130): the LG package files. `python3 tools/make_icon.py` (needs Pillow) draws all three icons, each for its own size (4x supersampled); `--preview DIR` also writes previews on dark and light backgrounds.
+- The app is named **Matinê** (`config.xml` `<name>`, `webos/appinfo.json` `title`, the page title). The ids stay `TvHome0001.Home` (Samsung) and `com.marcus.tvhome` (LG), so a new build installs over the old one and whatever launches the app by id (LG Home Helper, "Autorun Last App") still finds it.
 - `tools/build-webos.sh`: builds the LG `.ipk` (see "LG TVs (webOS)").
 - `tools/test-smart.js`: unit checks for `js/smart.js` (`node tools/test-smart.js`), including the provider mapping against the real BR provider list, the search rows and filters, and the search requests `js/catalog.js` builds.
 
