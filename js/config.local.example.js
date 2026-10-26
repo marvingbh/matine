@@ -35,6 +35,12 @@ window.TVHOME_CONFIG = {
   // hideLanguages: ['ko', 'ja', 'zh', 'cn', 'th', 'vi', 'id', 'ms', 'tl', 'hi', 'ta', 'te', 'ml', 'kn', 'bn', 'mr', 'pa', 'ur'],
   // hideCountries: ['KR', 'JP', 'CN', 'TW', 'HK', 'TH', 'VN', 'ID', 'MY', 'PH', 'IN', 'SG']
 
+  // Animation (films and series) is left out, except what these TMDB companies made: Walt
+  // Disney Animation Studios, Pixar, Walt Disney Pictures, Disney Television Animation.
+  // hideAnimation: false shows all animation again.
+  // hideAnimation: false
+  // animationAllowCompanies: [6125, 3, 2, 3475]
+
   // Samsung, top bar "Entradas": 'window' shows the chosen input full screen inside this app
   // instead of opening the TV's own viewer on it.
   // samsungInput: 'window'

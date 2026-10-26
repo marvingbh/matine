@@ -34,7 +34,7 @@
   var REFRESH_MS = 6 * 3600 * 1000;
   // Never suggested: anime and Asian titles (config hideAnime, hideLanguages, hideCountries).
   // The TMDB lists are filtered in js/catalog.js; the rows built from the history here.
-  var HIDE = Smart.hideRule(CFG);
+  var HIDE = Catalog.hide || Smart.hideRule(CFG);     // one rule, shared with js/catalog.js
 
   var LONG_PRESS = 600;      // ms holding OK on a poster opens the title in its app
 
@@ -970,8 +970,10 @@
     });
     buildMine();
     state.loading = true;
-    var genres = Catalog.mode === 'off' ? Promise.resolve() :
-      safe(Catalog.genres()).then(function (g) { state.genres = g && g.movie ? g : null; discover.setGenres(state.genres); });
+    var genres = Catalog.mode === 'off' ? Promise.resolve() : Promise.all([
+      safe(Catalog.genres()).then(function (g) { state.genres = g && g.movie ? g : null; discover.setGenres(state.genres); }),
+      Catalog.loadAnimationAllow()          // which animation may show (Disney, Pixar); cached a week
+    ]);
     return genres.then(function () {
       return Promise.all(TYPES.map(function (t) { return buildType(t, now, exclude, seenEx); }));
     }).then(function (byType) {

@@ -246,6 +246,53 @@
     }).catch(function () { return ''; });
   }
 
+  // ---------- Disney / Pixar animation (Smart.hideRule) ----------
+  // The keys of the animation those companies made (films with at least 50 votes, series
+  // with at least 10: about 230 + 100 titles, some 18 pages), asked page by page, once a
+  // week, in the background. Only the keys are kept. Until it is in, animation is hidden.
+  var ALLOW_TTL = 7 * 24 * HOUR;
+  var ALLOW_PAGES = 15;               // per type, at most
+
+  function allowTmdb() {
+    var companies = HIDE.companies.join('|');
+    function pages(type) {
+      function page(n) {
+        return xhrJSON(API + '/discover/' + type + '?' + qs({
+          with_genres: 16, with_companies: companies, include_adult: 'false', sort_by: 'popularity.desc',
+          'vote_count.gte': type === 'movie' ? 50 : 10, page: n
+        }), authHeaders());
+      }
+      return page(1).then(function (first) {
+        var n = Math.min(first.total_pages || 1, ALLOW_PAGES), more = [];
+        for (var i = 2; i <= n; i++) more.push(page(i));
+        return Promise.all(more).then(function (rest) {
+          return [first].concat(rest).reduce(function (keys, res) {
+            return keys.concat((res.results || []).map(function (r) { return type + ':' + r.id; }));
+          }, []);
+        });
+      });
+    }
+    return Promise.all([pages('movie'), pages('tv')]).then(function (r) { return r[0].concat(r[1]); });
+  }
+
+  function allowMock() {
+    return Promise.resolve(MOCK.titles.filter(function (t) {
+      return t.genres.indexOf(16) !== -1 && (t.companies || []).some(function (c) { return HIDE.companies.indexOf(c) !== -1; });
+    }).map(function (t) { return t.type + ':' + t.id; }));
+  }
+
+  // Fills HIDE.allow. Resolves the number of titles allowed (0 when nothing is known).
+  function loadAnimationAllow() {
+    if (!HIDE || !HIDE.animation || mode === 'off' || !HIDE.companies.length) return Promise.resolve(0);
+    var p = mode === 'mock' ? allowMock() : cached('animallow:' + HIDE.companies.join('|'), ALLOW_TTL, allowTmdb);
+    return p.then(function (keys) {
+      var m = {};
+      (keys || []).forEach(function (k) { m[k] = 1; });
+      HIDE.allow = m;
+      return keys.length;
+    }, function (err) { console.warn('animation allowlist', err); return 0; });
+  }
+
   // ---------- search (the "Buscar" screen, js/search.js) ----------
   // Asked while the user types, so the answers are kept in memory only (every prefix in
   // localStorage would crowd out the row cache) and the requests go to the front of the
@@ -288,6 +335,8 @@
     var date = type === 'movie' ? 'primary_release_date' : 'first_air_date';
     p.sort_by = 'popularity.desc';
     p.with_genres = f.cat ? f.cat[type] : '';
+    // "Animação" in the search: only the companies whose animation is shown (Disney, Pixar).
+    if (f.cat && f.cat[type] === 16 && HIDE && HIDE.animation && HIDE.companies.length) p.with_companies = HIDE.companies.join('|');
     p[date + '.gte'] = y.from ? y.from + '-01-01' : '';
     p[date + '.lte'] = y.to ? y.to + '-12-31' : '';
     // No pages of unknown titles; with "Nota", enough votes for the score to mean something.
@@ -556,6 +605,7 @@
     discover: noHidden(impl.discover, true),
     recommendations: noHidden(impl.recommendations, false),
     hide: HIDE,                 // the rule (Smart.hideRule) for the lists built elsewhere
+    loadAnimationAllow: loadAnimationAllow,
     details: impl.details,
     genres: impl.genres,
     imdbRating: imdbRating,

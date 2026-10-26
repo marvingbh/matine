@@ -417,6 +417,23 @@ test('Novidades: windows (films 90 days, series 60), order newest first, Estreia
   assert.deepStrictEqual(shows.map(function (x) { return x.id + ' ' + x.reason; }), ['4 Estreia', '3 Nova temporada']);
 });
 
+test('animation: only Disney / Pixar (the allowlist) shows; config can turn it off', function () {
+  var rule = Smart.hideRule({});
+  assert.deepStrictEqual(rule.companies, [6125, 3, 2, 3475]);
+  var pixar = item('movie', 1022789, 'Divertida Mente 2', [16, 10751], { lang: 'en', countries: ['US'] });
+  var dreamworks = item('movie', 1184918, 'Robô Selvagem', [16, 878], { lang: 'en', countries: ['US'] });
+  var arcane = item('tv', 94605, 'Arcane', [16, 10765], { lang: 'en', countries: ['US'] });
+  var live = item('movie', 693134, 'Duna: Parte Dois', [878], { lang: 'en' });
+  var all = [pixar, dreamworks, arcane, live];
+  assert.deepStrictEqual(Smart.dropHidden(all, rule).map(function (x) { return x.id; }), [693134], 'allowlist not loaded yet: no animation');
+  rule.allow = { 'movie:1022789': 1 };
+  assert.deepStrictEqual(Smart.dropHidden(all, rule).map(function (x) { return x.id; }), [1022789, 693134]);
+  assert.strictEqual(Smart.dropHidden(all, Smart.hideRule({ hideAnimation: false })).length, 4);
+  // History rows and search go through the same rule.
+  var rows = Smart.searchRows({ items: all, people: [] }, null, rule, null);
+  assert.deepStrictEqual(rows.map(function (r) { return r.id + '=' + r.items.length; }), ['movie=2']);
+});
+
 // catalog.js in a sandbox with a fake XMLHttpRequest: what it asks TMDB and what it returns.
 function catalogWith(cfg, answer) {
   var urls = [];
@@ -453,7 +470,7 @@ function testAsync(name, fn) { asyncTests.push({ name: name, fn: fn }); }
 function titles(list) { return JSON.stringify(list.map(function (x) { return x.title; })); }   // across vm realms
 
 testAsync('catalog: discover excludes the anime keyword and every list drops anime', function () {
-  var t = catalogWith({ tmdbToken: 'test' }, TMDB_ANSWER);
+  var t = catalogWith({ tmdbToken: 'test', hideAnimation: false }, TMDB_ANSWER);
   return t.Catalog.discover({ type: 'tv', providers: [8] }).then(function (list) {
     assert.ok(/[?&]without_keywords=210024(&|$)/.test(t.urls[0]), t.urls[0]);
     assert.strictEqual(titles(list), '["Arcane","Shogun"]');
@@ -465,7 +482,7 @@ testAsync('catalog: discover excludes the anime keyword and every list drops ani
 });
 
 testAsync('catalog: hideAnime false keeps anime', function () {
-  var t = catalogWith({ tmdbToken: 'test', hideAnime: false, hideLanguages: false, hideCountries: false }, TMDB_ANSWER);
+  var t = catalogWith({ tmdbToken: 'test', hideAnime: false, hideAnimation: false, hideLanguages: false, hideCountries: false }, TMDB_ANSWER);
   return t.Catalog.discover({ type: 'tv' }).then(function (list) {
     assert.ok(t.urls[0].indexOf('without_keywords') === -1, t.urls[0]);
     assert.strictEqual(list.length, 3);
@@ -545,12 +562,12 @@ testAsync('catalog search: text + Nota -> /search/movie and /search/tv (score ch
 testAsync('catalog: a discover page thinned by the filter is topped up once with the next page', function () {
   var t = catalogWith({ tmdbToken: 'test' }, { results: [
     { id: 1, media_type: 'tv', name: 'K-drama', poster_path: '/a.jpg', genre_ids: [18], original_language: 'ko', origin_country: ['KR'] },
-    { id: 2, media_type: 'tv', name: 'Arcane', poster_path: '/b.jpg', genre_ids: [16], original_language: 'en', origin_country: ['US'] }
+    { id: 2, media_type: 'tv', name: 'Shogun', poster_path: '/b.jpg', genre_ids: [18], original_language: 'en', origin_country: ['US'] }
   ] });
   return t.Catalog.discover({ type: 'tv', providers: [8] }).then(function (list) {
     assert.strictEqual(t.urls.length, 2, t.urls.join(' '));
     assert.ok(/[?&]page=2(&|$)/.test(t.urls[1]), t.urls[1]);
-    assert.strictEqual(titles(list), '["Arcane"]', 'deduplicated, Korean title left out');
+    assert.strictEqual(titles(list), '["Shogun"]', 'deduplicated, Korean title left out');
     return t.Catalog.discover({ type: 'tv', providers: [8], page: 2 });
   }).then(function () {
     assert.strictEqual(t.urls.length, 2, 'page 2 is cached and not topped up again');
@@ -578,6 +595,32 @@ testAsync('catalog: rows keep flatrate only unless asked', function () {
   var t = catalogWith({ tmdbToken: 'test' }, { results: [] });
   return t.Catalog.discover({ type: 'movie', providers: [8] }).then(function () {
     assert.ok(/with_watch_monetization_types=flatrate(&|$)/.test(t.urls[0]), t.urls[0]);
+  });
+});
+
+testAsync('catalog: the Disney / Pixar allowlist is read page by page once, and fills the rule', function () {
+  var t = catalogWith({ tmdbToken: 'test' }, { total_pages: 2, results: [{ id: 7, title: 'Toy Story' }, { id: 8, title: 'Up' }] });
+  return t.Catalog.loadAnimationAllow().then(function (n) {
+    assert.strictEqual(t.urls.length, 4, t.urls.join(' '));                       // 2 pages x films, series
+    var mv = t.urls.filter(function (u) { return u.indexOf('/discover/movie?') !== -1; });
+    assert.ok(/with_genres=16/.test(mv[0]) && /with_companies=6125%7C3%7C2%7C3475/.test(mv[0]) && /vote_count\.gte=50/.test(mv[0]), mv[0]);
+    assert.ok(mv.some(function (u) { return /[?&]page=2(&|$)/.test(u); }));
+    assert.strictEqual(n, 8);
+    assert.ok(t.Catalog.hide.allow['movie:7'] && t.Catalog.hide.allow['tv:8']);
+    return t.Catalog.loadAnimationAllow();
+  }).then(function () {
+    assert.strictEqual(t.urls.length, 4, 'cached for a week');
+  });
+});
+
+testAsync('catalog search: "Animação" with no text asks only Disney / Pixar companies', function () {
+  var t = catalogWith({ tmdbToken: 'test' }, { results: [] });
+  return t.Catalog.search({ text: '', cat: { movie: 16, tv: 16 }, year: null, rating: null, stream: null }).then(function () {
+    t.urls.forEach(function (u) { assert.ok(/with_genres=16/.test(u) && /with_companies=6125%7C3%7C2%7C3475/.test(u), u); });
+    var n = t.urls.length;
+    return t.Catalog.search({ text: '', cat: { movie: 18, tv: 18 }, year: null, rating: null, stream: null }).then(function () {
+      t.urls.slice(n).forEach(function (u) { assert.ok(u.indexOf('with_companies') === -1, u); });
+    });
   });
 });
 

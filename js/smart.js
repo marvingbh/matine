@@ -400,7 +400,15 @@
   var HIDE_LANGUAGES = ['ko', 'ja', 'zh', 'cn', 'th', 'vi', 'id', 'ms', 'tl', 'hi', 'ta', 'te', 'ml', 'kn', 'bn', 'mr', 'pa', 'ur'];
   var HIDE_COUNTRIES = ['KR', 'JP', 'CN', 'TW', 'HK', 'TH', 'VN', 'ID', 'MY', 'PH', 'IN', 'SG'];
 
-  // The rule from the config: { anime, langs: { code: 1 }, countries: { code: 1 } }.
+  // Animation (genre 16, films and series) is left out too, except Disney and Pixar (config
+  // hideAnimation, animationAllowCompanies: TMDB companies Walt Disney Animation Studios,
+  // Pixar, Walt Disney Pictures, Disney Television Animation). Lists do not say who made a
+  // title, so catalog.js loads the keys of those companies' animation once a week
+  // (Catalog.loadAnimationAllow) into rule.allow.
+  var ANIMATION_ALLOW_COMPANIES = [6125, 3, 2, 3475];
+
+  // The rule from the config: { anime, animation, companies: [ids], allow: { key: 1 },
+  // langs: { code: 1 }, countries: { code: 1 } }.
   function hideRule(cfg) {
     cfg = cfg || {};
     function set(v, def) {
@@ -408,7 +416,14 @@
       (v === false ? [] : Array.isArray(v) ? v : def).forEach(function (x) { m[x] = 1; });
       return m;
     }
-    return { anime: cfg.hideAnime !== false, langs: set(cfg.hideLanguages, HIDE_LANGUAGES), countries: set(cfg.hideCountries, HIDE_COUNTRIES) };
+    return {
+      anime: cfg.hideAnime !== false,
+      animation: cfg.hideAnimation !== false,
+      companies: Array.isArray(cfg.animationAllowCompanies) ? cfg.animationAllowCompanies : ANIMATION_ALLOW_COMPANIES,
+      allow: {},
+      langs: set(cfg.hideLanguages, HIDE_LANGUAGES),
+      countries: set(cfg.hideCountries, HIDE_COUNTRIES)
+    };
   }
 
   // rule: from hideRule; true means anime only; falsy hides nothing.
@@ -416,6 +431,7 @@
     if (!it || !rule) return false;
     if (rule === true) return isAnime(it);
     if (rule.anime && isAnime(it)) return true;
+    if (rule.animation && (it.genreIds || []).indexOf(ANIMATION) !== -1 && !(rule.allow && rule.allow[it.key])) return true;
     if (it.lang && rule.langs[it.lang]) return true;
     var cs = it.countries || [];
     for (var i = 0; i < cs.length; i++) if (rule.countries[cs[i]]) return true;

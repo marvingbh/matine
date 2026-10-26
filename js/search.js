@@ -220,7 +220,7 @@
     function catOptions() {
       return [{ key: 'all', name: 'Todas', cat: null }].concat(Smart.searchCategories(opts.genres()).map(function (c) {
         return { key: c.key, name: c.name, cat: { movie: c.movie, tv: c.tv },
-          note: !c.movie ? 'só séries' : !c.tv ? 'só filmes' : '' };
+          note: c.movie === 16 && opts.hide && opts.hide.animation ? 'Disney e Pixar' : !c.movie ? 'só séries' : !c.tv ? 'só filmes' : '' };
       }));
     }
 

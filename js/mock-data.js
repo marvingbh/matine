@@ -55,7 +55,7 @@
       overview: 'Um treinador de futebol americano sem nenhuma experiência é contratado para comandar um time de futebol inglês, e conquista todos com otimismo.' },
     { id: 95480, type: 'tv', title: 'Slow Horses', year: 2022, genres: [18, 80], rating: 8.0, votes: 700, popularity: 110, seasons: 5, palette: 7, providers: [APPLE],
       overview: 'Agentes do MI5 que caíram em desgraça são mandados para um departamento esquecido, mas se metem em casos que ninguém mais quer resolver.' },
-    { id: 1022789, type: 'movie', title: 'Divertida Mente 2', year: 2024, genres: [16, 10751, 35], rating: 7.6, votes: 5200, popularity: 300, runtime: 96, palette: 1, providers: [DISNEY],
+    { id: 1022789, type: 'movie', title: 'Divertida Mente 2', year: 2024, genres: [16, 10751, 35], rating: 7.6, votes: 5200, popularity: 300, runtime: 96, palette: 1, providers: [DISNEY], companies: [3],
       overview: 'Riley entra na adolescência e a sala de controle da sua mente recebe novas emoções, como a Ansiedade, que chegam para mudar tudo.' },
     { id: 872585, type: 'movie', title: 'Oppenheimer', year: 2023, genres: [18, 36], rating: 8.1, votes: 9500, popularity: 230, runtime: 180, palette: 4, providers: [PRIME], imdbId: 'tt15398776',
       overview: 'A história do físico J. Robert Oppenheimer e do projeto secreto que criou a bomba atômica, e o preço pessoal que ele pagou por isso.' },
@@ -101,7 +101,7 @@
       overview: 'Nova York, anos 60. Um vigarista é contratado para trazer de volta da Itália o filho de um milionário, e se apaixona pela vida que encontra lá.' },
     { id: 1064213, type: 'movie', title: 'Anora', year: 2024, genres: [35, 18, 10749], rating: 7.1, votes: 2100, popularity: 100, runtime: 139, palette: 6, providers: [PRIME],
       overview: 'Uma jovem do Brooklyn se casa por impulso com o filho de um oligarca russo, e os pais dele vêm a Nova York para desfazer o casamento.' },
-    { id: 1241982, type: 'movie', title: 'Moana 2', year: 2024, genres: [16, 12, 10751], rating: 7.0, votes: 1800, popularity: 160, runtime: 100, palette: 3, providers: [DISNEY],
+    { id: 1241982, type: 'movie', title: 'Moana 2', year: 2024, genres: [16, 12, 10751], rating: 7.0, votes: 1800, popularity: 160, runtime: 100, palette: 3, providers: [DISNEY], companies: [6125, 2],
       overview: 'Moana recebe um chamado dos ancestrais e parte com uma nova tripulação para os mares distantes da Oceania.' }
   ];
 
@@ -128,6 +128,9 @@
     { id: 6, name: 'Selton Mello', dept: 'Acting', palette: 3, credits: ['movie:1022690', 'movie:1000837'] },
     { id: 7, name: 'Adam Scott', dept: 'Acting', palette: 0, credits: ['tv:95396'] }
   ];
+
+  // Animation: only Divertida Mente 2 (Pixar) and Moana 2 (Disney) have the companies of
+  // animationAllowCompanies; Arcane and Robô Selvagem are left out everywhere.
 
   var imdb = {
     tt11280740: '8.7', tt14452776: '8.5', tt10919420: '8.0', tt15239678: '8.5', tt14961016: '8.1',
