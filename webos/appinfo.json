@@ -1,13 +1,13 @@
 {
   "id": "com.marcus.tvhome",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "vendor": "Marcus",
   "type": "web",
   "main": "index.html",
   "title": "Matinê",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
-  "iconColor": "#22225c",
+  "iconColor": "#541e62",
   "resolution": "1920x1080",
   "disableBackHistoryAPI": true,
   "requiredACG": [

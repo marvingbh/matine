@@ -1,38 +1,34 @@
 #!/usr/bin/env python3
-"""Generate the Matinê icons: a warm sun rising behind a low ridge (Belo Horizonte's
-"beautiful horizon"), under a sky that goes from deep night blue to rose and amber. The
-dark ground under the horizon is a film strip: a row of perforations runs along its top
-edge, so the horizon line doubles as the edge of a film. Flat with depth, tvOS style: a
-soft glow round the sun, a thin warm rim light on the horizon. No text.
+"""Generate the Matinê icons: the name as the logo, like the streaming apps' tiles. "Matinê"
+in Inter ExtraBold (the app's own typeface, a heavier weight), warm cream on a deep plum
+gradient, which stands apart from Netflix red, Max and Prime blue and Disney navy; a short
+amber-to-rose bar under the word, the sunrise of a matinê. No scenery.
 
-Sizes (each drawn for its own shape, not cropped):
+Sizes (each drawn for its own shape):
   icon.png              512x423, 24-bit RGB, full bleed: Samsung's TV app icon spec
                         (developer.samsung.com, "App Icons and Screenshots"). The TV may
-                        round the corners with a squircle mask, so everything important
-                        stays well inside the edges.
+                        round the corners with a squircle mask, so the word stays inside.
   webos/icon.png        80x80   LG launcher icon (webos/appinfo.json "icon")
   webos/largeIcon.png   130x130 LG large icon ("largeIcon")
 
 Needs Pillow (pip install pillow). Drawn at 4x and scaled down for smooth edges.
+The font is tools/fonts/inter-latin-800-normal.woff (Inter, SIL Open Font License 1.1, see
+fonts/OFL.txt; from the Fontsource package @fontsource/inter 5.1.0). It is used only here,
+never packaged with the app.
 `python3 tools/make_icon.py --preview DIR` also writes previews into DIR."""
 import os
 import sys
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFont
 
 S = 4                                   # supersampling factor
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+FONT = os.path.join(ROOT, 'tools', 'fonts', 'inter-latin-800-normal.woff')
+WORD = 'Matinê'
 
-SKY = [(0.00, (10, 14, 44)),            # deep night blue at the top
-       (0.32, (34, 34, 96)),            # indigo
-       (0.52, (122, 60, 128)),          # plum
-       (0.62, (226, 102, 112)),         # rose
-       (0.66, (255, 168, 90))]          # amber at the horizon
-SUN = (255, 226, 166)
-SUN_EDGE = (255, 186, 112)
-RIDGE = (58, 36, 86)                    # the low ridge in front of the sun
-GROUND = (16, 18, 44)                   # the film strip
-HOLE = (52, 50, 100)                    # its perforations, a little lighter
-RIM = (255, 196, 128)                   # the warm line on the horizon
+TOP = (84, 30, 98)                      # plum, top left
+BOTTOM = (40, 14, 54)                   # deep plum, bottom right
+TEXT = (255, 233, 204)                  # warm cream
+BAR = [(255, 178, 74), (240, 92, 112)]  # amber to rose
 
 
 def lerp(a, b, t):
@@ -40,66 +36,61 @@ def lerp(a, b, t):
     return tuple(int(round(a[k] + (b[k] - a[k]) * t)) for k in range(3))
 
 
-def sky_colour(t):
-    for (t0, c0), (t1, c1) in zip(SKY, SKY[1:]):
-        if t <= t1:
-            return lerp(c0, c1, (t - t0) / (t1 - t0))
-    return SKY[-1][1]
+def fitted_font(text, width):
+    """Inter ExtraBold at the size where `text` is `width` pixels wide."""
+    size = 100
+    f = ImageFont.truetype(FONT, size)
+    l, _, r, _ = f.getbbox(text)
+    return ImageFont.truetype(FONT, max(8, int(size * width / (r - l))))
 
 
 def draw(W, H):
     """The icon at W x H (drawn at S times that, then scaled down)."""
     w, h = W * S, H * S
-    m = min(w, h)
-    horizon = 0.70 * h
+    # A diagonal gradient, with a faint warm light low on the right (depth, no scenery).
     img = Image.new('RGB', (w, h))
-    d = ImageDraw.Draw(img)
+    px = img.load()
     for y in range(h):
-        d.line([(0, y), (w, y)], fill=sky_colour(y / horizon * 0.66))
-
-    # The sun: a soft glow, then the disc with a warmer lower half, half risen.
-    cx, r = w / 2, 0.25 * m
-    cy = horizon + 0.02 * h
-    glow = Image.new('L', (w, h), 0)
-    ImageDraw.Draw(glow).ellipse([cx - 1.7 * r, cy - 1.5 * r, cx + 1.7 * r, cy + 1.5 * r], fill=150)
-    glow = glow.filter(ImageFilter.GaussianBlur(0.6 * r))
-    img = Image.composite(Image.new('RGB', (w, h), (255, 150, 110)), img, glow)
-    sun = Image.new('RGB', (w, h))
-    sd = ImageDraw.Draw(sun)
-    for y in range(int(cy - r), int(cy + r) + 1):
-        sd.line([(0, y), (w, y)], fill=lerp(SUN, SUN_EDGE, (y - (cy - r)) / (1.3 * r)))
-    disc = Image.new('L', (w, h), 0)
-    ImageDraw.Draw(disc).ellipse([cx - r, cy - r, cx + r, cy + r], fill=255)
-    img = Image.composite(sun, img, disc)
+        for x in range(0, w, 1):
+            t = (x / w * 0.45 + y / h * 0.55)
+            c = lerp(TOP, BOTTOM, t)
+            dx, dy = (x - w * 0.85) / w, (y - h * 0.95) / h
+            warm = max(0.0, 1.0 - (dx * dx + dy * dy) * 4.5) * 0.22
+            px[x, y] = lerp(c, (196, 70, 96), warm)
     d = ImageDraw.Draw(img)
 
-    # A low ridge in front of the sun: gentle, like the Serra do Curral.
-    ridge = [(0, horizon - 0.045 * h), (0.12 * w, horizon - 0.07 * h), (0.24 * w, horizon - 0.05 * h),
-             (0.33 * w, horizon - 0.035 * h), (0.42 * w, horizon - 0.015 * h), (0.58 * w, horizon - 0.012 * h),
-             (0.70 * w, horizon - 0.04 * h), (0.80 * w, horizon - 0.075 * h), (0.90 * w, horizon - 0.06 * h),
-             (w, horizon - 0.05 * h), (w, h), (0, h)]
-    d.polygon(ridge, fill=RIDGE)
+    # The word: 84% of the width (72% on the wide Samsung icon, so it stays
+    # inside the squircle mask), letters pulled slightly together.
+    square = abs(W - H) < 2
+    target = w * (0.84 if square else 0.72)
+    track = -0.012                      # tracking, as a fraction of the font size
+    font = fitted_font(WORD, target)
+    widths = [font.getlength(ch) for ch in WORD]
+    total = sum(widths) + track * font.size * (len(WORD) - 1)
+    font = ImageFont.truetype(FONT, int(font.size * target / total))
+    widths = [font.getlength(ch) for ch in WORD]
+    total = sum(widths) + track * font.size * (len(WORD) - 1)
+    asc, _ = font.getmetrics()
+    _, top, _, bottom = font.getbbox(WORD)          # the circumflex included
+    bar_h = max(S * 2, int(font.size * 0.075))
+    gap = int(font.size * 0.16)
+    block = (bottom - top) + gap + bar_h
+    y0 = (h - block) / 2 - top - h * 0.01
+    x = (w - total) / 2
+    for ch, cw in zip(WORD, widths):
+        d.text((x, y0), ch, font=font, fill=TEXT)
+        x += cw + track * font.size
 
-    # The ground is a film strip: a warm rim on the horizon, then a row of perforations.
-    band = horizon + 0.035 * h
-    d.rectangle([0, band, w, h], fill=GROUND)
-    d.rectangle([0, band, w, band + max(S, 0.008 * h)], fill=RIM)
-    hole_w, hole_h = 0.085 * m, 0.075 * m
-    gap = hole_w * 0.8
-    step = hole_w + gap
-    n = int(w // step) + 2
-    x0 = (w - (n * step - gap)) / 2
-    top = band + (h - band - hole_h) * 0.42
-    for i in range(n):
-        x = x0 + i * step
-        d.rounded_rectangle([x, top, x + hole_w, top + hole_h], radius=hole_h * 0.28, fill=HOLE)
-
-    # Depth: the strip darkens towards the bottom.
-    shade = Image.new('L', (w, h), 0)
-    sh = ImageDraw.Draw(shade)
-    for y in range(int(band), h):
-        sh.line([(0, y), (w, y)], fill=int(70 * (y - band) / (h - band)))
-    img = Image.composite(Image.new('RGB', (w, h), (6, 7, 18)), img, shade)
+    # The bar: short and centred under the word, amber to rose.
+    bw = total * 0.34
+    bx, by = (w - bw) / 2, y0 + bottom + gap
+    bar = Image.new('RGB', (int(bw), bar_h))
+    bd = ImageDraw.Draw(bar)
+    for i in range(int(bw)):
+        bd.line([(i, 0), (i, bar_h)], fill=lerp(BAR[0], BAR[1], i / bw))
+    mask = Image.new('L', bar.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, bar.size[0] - 1, bar_h - 1], radius=bar_h // 2, fill=255)
+    img.paste(bar, (int(bx), int(by)), mask)
     return img.resize((W, H), Image.LANCZOS)
 
 
@@ -120,25 +111,19 @@ def rounded(img, radius_frac):
     return out
 
 
-def previews(out_dir):
+def previews(out_dir, name='icon-matine-v2'):
     os.makedirs(out_dir, exist_ok=True)
-    big = draw(512, 423)
-    big.save(os.path.join(out_dir, 'icon-matine.png'))
-    for name, bg, fg in (('dark', (16, 17, 21), (235, 235, 240)), ('light', (236, 236, 240), (30, 30, 36))):
-        canvas = Image.new('RGB', (1200, 560), bg)
+    draw(512, 423).save(os.path.join(out_dir, name + '.png'))
+    label = ImageFont.truetype(FONT, 26)
+    for tone, bg, fg in (('dark', (16, 17, 21), (235, 235, 240)), ('light', (236, 236, 240), (30, 30, 36))):
+        canvas = Image.new('RGB', (1200, 520), bg)
         x = 60
         for size, rad in (((400, 330), 0.12), ((200, 200), 0.22), ((130, 130), 0.22), ((80, 80), 0.22), ((48, 48), 0.22)):
             icon = rounded(draw(*size), rad)
-            y = 60 + (330 - size[1]) // 2
-            canvas.paste(icon, (x, y), icon)
+            canvas.paste(icon, (x, 60 + (330 - size[1]) // 2), icon)
             x += size[0] + 60
-        try:
-            from PIL import ImageFont
-            font = ImageFont.truetype('/System/Library/Fonts/Supplemental/Arial.ttf', 28)
-        except (IOError, OSError):
-            font = None
-        ImageDraw.Draw(canvas).text((60, 440), 'Matinê  ·  512x423 (Samsung), 200, 130 (LG large), 80 (LG), 48', fill=fg, font=font)
-        canvas.save(os.path.join(out_dir, 'icon-matine-on-%s.png' % name))
+        ImageDraw.Draw(canvas).text((60, 440), '512x423 (Samsung) · 200 · 130 (LG large) · 80 (LG) · 48', fill=fg, font=label)
+        canvas.save(os.path.join(out_dir, '%s-on-%s.png' % (name, tone)))
     print('previews in', out_dir)
 
 
