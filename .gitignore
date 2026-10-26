@@ -1,0 +1,6 @@
+js/config.local.js
+.DS_Store
+*.wgt
+*.ipk
+.buildResult/
+node_modules/

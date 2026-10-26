@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, user-scalable=no">
+  <title>Início</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-view="home" data-zone="list">
+  <div id="stage">
+    <div id="bg">
+      <div class="bg-layer" id="bg-a"></div>
+      <div class="bg-layer" id="bg-b"></div>
+    </div>
+    <div class="shade"></div>
+    <div class="shade shade--grid"></div>
+
+    <header class="top">
+      <div class="heading">
+        <!-- Top bar (home screen): Up from the first app or poster row. js/app.js -->
+        <nav id="bar">
+          <div class="bar__pill"><svg class="bar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7.5h17v4.2L17 16H7l-3.5-4.3z"/><path d="M8.5 16v3.5h7V16M8 11h8"/></svg><span>Entradas</span></div>
+          <div class="bar__pill"><svg class="bar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 9.2a14 14 0 0 1 19 0M5.8 12.6a9.2 9.2 0 0 1 12.4 0M9.1 16a4.5 4.5 0 0 1 5.8 0"/><circle cx="12" cy="19.4" r="1.1" fill="currentColor"/></svg><span id="bar-net">Wi-Fi</span></div>
+          <div class="bar__pill"><svg class="bar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9.5M18.5 7H20M4 17h1.5M10.5 17H20"/><circle cx="16" cy="7" r="2.5"/><circle cx="8" cy="17" r="2.5"/></svg><span>Ajustes</span></div>
+        </nav>
+        <h1 id="title"></h1>
+        <div id="subtitle"></div>
+      </div>
+      <div class="status">
+        <div id="weather" hidden></div>
+        <div class="clock">
+          <div id="clock">--:--</div>
+          <div id="date"></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Top Shelf: the focused app's (or poster's) artwork fills the top of the screen; its
+         text sits bottom-left. Filled by js/app.js (apps) and js/discover.js (posters). -->
+    <div id="hero">
+      <div id="hero-eyebrow"></div>
+      <h2 id="hero-title"></h2>
+      <div id="hero-meta"></div>
+      <p id="hero-overview"></p>
+      <div id="hero-providers"></div>
+      <div id="hero-dots"></div>
+    </div>
+
+    <main>
+      <!-- The app grid (5 per row, like tvOS). Positions are fixed; only classes change. -->
+      <div id="list-wrap">
+        <ul id="list"></ul>
+        <p id="empty" hidden>Nenhum app encontrado.</p>
+      </div>
+      <div id="ids" hidden></div>
+    </main>
+
+    <section id="discover">
+      <div id="rows"></div>
+      <p id="discover-hint" hidden></p>
+    </section>
+
+    <div id="mine-note" hidden>
+      <div id="mine-summary"></div>
+      <div class="mine-note__fine">A TV não deixa um app ler o histórico de outro. Aqui ficam só os títulos que você abre ou marca nesta tela. · Dados: TMDB. Este produto usa a API do TMDB, mas não é endossado nem certificado pelo TMDB.</div>
+    </div>
+
+    <nav id="menu"></nav>
+
+    <footer class="bottom">
+      <div id="hints"></div>
+    </footer>
+
+    <div id="inputs" hidden></div>
+    <div id="chooser" hidden></div>
+    <div id="details" hidden></div>
+
+    <div id="mock-badge" hidden>Pré-visualização com dados de exemplo · setas, Enter = detalhes (segure = abrir no app), Esc, G = já vi, Y = desfazer, R = menu, B = todos os apps</div>
+    <div id="toast" role="status"></div>
+  </div>
+
+  <script src="js/apps-data.js"></script>
+  <!-- Optional personal settings (API keys, city). Missing file = no suggestions, no weather. -->
+  <script src="js/config.local.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/platform.js"></script>
+  <script src="js/smart.js"></script>
+  <script src="js/mock-data.js"></script>
+  <script src="js/deeplink.js"></script>
+  <script src="js/catalog.js"></script>
+  <script src="js/weather.js"></script>
+  <script src="js/discover.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

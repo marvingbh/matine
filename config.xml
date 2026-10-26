@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://example.local/TvHome" version="1.0.0" viewmodes="maximized">
+    <tizen:application id="TvHome0001.Home" package="TvHome0001" required_version="6.0"/>
+    <name>Início</name>
+    <description>Tela inicial com os apps de streaming instalados, sugestões de filmes e séries e o clima.</description>
+    <icon src="icon.png"/>
+    <content src="index.html"/>
+    <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
+    <tizen:profile name="tv-samsung"/>
+    <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+    <tizen:privilege name="http://tizen.org/privilege/application.info"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <!-- Switching to an HDMI input from the top bar (TV Window API, js/platform.js). -->
+    <tizen:privilege name="http://tizen.org/privilege/tv.window"/>
+    <!-- Network access (W3C WARP): a packaged Tizen app reaches only the origins listed here. -->
+    <access origin="https://api.themoviedb.org" subdomains="false"/>
+    <access origin="https://image.tmdb.org" subdomains="false"/>
+    <access origin="https://www.omdbapi.com" subdomains="false"/>
+    <access origin="https://api.open-meteo.com" subdomains="false"/>
+    <!-- The title's ids on Netflix, Disney+ & co. (js/deeplink.js). -->
+    <access origin="https://query.wikidata.org" subdomains="false"/>
+    <access origin="https://geocoding-api.open-meteo.com" subdomains="false"/>
+    <tizen:metadata key="http://tizen.org/metadata/app_ui_type/base_screen_resolution" value="extensive"/>
+    <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable"
+                   encryption="disable" install-location="auto" hwkey-event="enable"
+                   pointing-device-support="disable"/>
+</widget>
