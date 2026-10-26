@@ -105,6 +105,21 @@
       overview: 'Moana recebe um chamado dos ancestrais e parte com uma nova tripulação para os mares distantes da Oceania.' }
   ];
 
+  // Japanese animation, to see the anime filter at work (hidden everywhere with hideAnime).
+  titles.push({ id: 209867, type: 'tv', title: 'Frieren e a Jornada para o Além', year: 2023, genres: [16, 10759, 10765], rating: 8.8, votes: 600, popularity: 90, seasons: 1, palette: 1, providers: [NETFLIX], lang: 'ja', countries: ['JP'],
+    overview: 'Depois de derrotar o Rei Demônio, uma maga elfa revisita os lugares da jornada e descobre o que a amizade com os companheiros significou.' });
+
+  // People for the search screen ("Pessoas"); credits are keys of the titles above.
+  var people = [
+    { id: 1, name: 'Fernanda Torres', dept: 'Acting', palette: 2, credits: ['movie:1000837'] },
+    { id: 2, name: 'Pedro Pascal', dept: 'Acting', palette: 7, credits: ['tv:100088'] },
+    { id: 3, name: 'Timothée Chalamet', dept: 'Acting', palette: 5, credits: ['movie:693134'] },
+    { id: 4, name: 'Denis Villeneuve', dept: 'Directing', palette: 4, credits: ['movie:693134'] },
+    { id: 5, name: 'Christopher Nolan', dept: 'Directing', palette: 7, credits: ['movie:872585', 'movie:157336'] },
+    { id: 6, name: 'Selton Mello', dept: 'Acting', palette: 3, credits: ['movie:1022690', 'movie:1000837'] },
+    { id: 7, name: 'Adam Scott', dept: 'Acting', palette: 0, credits: ['tv:95396'] }
+  ];
+
   var imdb = {
     tt11280740: '8.7', tt14452776: '8.5', tt10919420: '8.0', tt15239678: '8.5', tt14961016: '8.1',
     tt2788316: '8.6', tt3581920: '8.6', tt11126994: '9.0', tt1190634: '8.6', tt10986410: '8.8',
@@ -119,6 +134,7 @@
     byKey: byKey,
     providerNames: providerNames,
     genreNames: genreNames,
+    people: people,
     imdb: imdb
   };
 })();

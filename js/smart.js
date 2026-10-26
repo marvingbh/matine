@@ -1,6 +1,7 @@
 /*
  * Pure logic, no DOM and no network: provider-to-app mapping, the watch history model,
- * the taste profile, "Para você" ranking, the time/weather "mood" row and the anime filter.
+ * the taste profile, "Para você" ranking, the time/weather "mood" row, the anime filter and
+ * the search screen's rows and filters.
  * Runs in the TV (window.Smart) and in node (module.exports) for tools/test-smart.js.
  */
 (function (root, factory) {
@@ -354,6 +355,67 @@
     return (items || []).filter(function (it) { return !isAnime(it); });
   }
 
+  // ---------- search (the "Buscar" screen, js/search.js) ----------
+
+  // The categories of the search filter: one entry per genre, with its id for films and for
+  // series (null when TMDB has it for only one of them). Films' genres first, matched to the
+  // TV genre that stands for them (Aventura -> "Ação e Aventura"); then the TV-only genres
+  // (Reality, Novela…). genres: { movie: { id: name }, tv: { id: name } }. Sorted by name.
+  function searchCategories(genres) {
+    var mv = (genres && genres.movie) || {}, tv = (genres && genres.tv) || {};
+    var out = [], usedTv = {};
+    Object.keys(mv).forEach(function (k) {
+      var id = +k, t = genreFor('tv', id);
+      if (t && !tv[t]) t = null;
+      // Two film genres can share one TV genre (Ação and Aventura both use "Ação e Aventura").
+      if (t) usedTv[t] = true;
+      out.push({ key: 'g' + id, name: mv[k], movie: id, tv: t });
+    });
+    Object.keys(tv).forEach(function (k) {
+      var id = +k;
+      if (usedTv[id] || mv[id]) return;
+      out.push({ key: 'g' + id, name: tv[k], movie: null, tv: id });
+    });
+    return out.sort(function (a, b) { return a.name.localeCompare(b.name, 'pt-BR'); });
+  }
+
+  // Does a title pass the search filter? filter: { cat: { movie, tv } | null,
+  // year: { from, to } | null } (years, either end may be null).
+  function passesFilter(it, filter) {
+    if (!filter) return true;
+    if (filter.cat) {
+      var g = filter.cat[it.type];
+      if (!g || (it.genreIds || []).indexOf(g) === -1) return false;
+    }
+    if (filter.year) {
+      var y = parseInt(it.year, 10);
+      if (!y) return false;
+      if (filter.year.from && y < filter.year.from) return false;
+      if (filter.year.to && y > filter.year.to) return false;
+    }
+    return true;
+  }
+
+  // A search answer ({ items, people }) as the rows of the search screen: films and series
+  // apart, without titles marked "Já vi" (isWatched(key)), without anime when hideAnime, and
+  // only what passes the filter. People are kept unless a filter is set (or all they are
+  // known for is anime). Returns [{ id: 'movie'|'tv'|'people', items }], empty rows left out.
+  function searchRows(res, isWatched, hideAnime, filter) {
+    var by = { movie: [], tv: [] }, seen = {};
+    ((res && res.items) || []).forEach(function (it) {
+      if (!it || !by[it.type] || seen[it.key]) return;
+      if ((hideAnime && isAnime(it)) || (isWatched && isWatched(it.key)) || !passesFilter(it, filter)) return;
+      seen[it.key] = true;
+      by[it.type].push(it);
+    });
+    var filtered = filter && (filter.cat || filter.year);
+    var people = filtered ? [] : ((res && res.people) || []).filter(function (p) {
+      return !hideAnime || !p.known || !p.known.length || !p.known.every(isAnime);
+    });
+    return [{ id: 'movie', items: by.movie }, { id: 'tv', items: by.tv }, { id: 'people', items: people }]
+      .filter(function (r) { return r.items.length; });
+  }
+
   // ---------- formatting ----------
 
   function formatRating(n) {
@@ -398,6 +460,9 @@
     isRain: isRain,
     isAnime: isAnime,
     dropAnime: dropAnime,
+    searchCategories: searchCategories,
+    passesFilter: passesFilter,
+    searchRows: searchRows,
     formatRating: formatRating,
     relTime: relTime
   };

@@ -11,6 +11,8 @@
  * Details shape:
  *   { runtime, seasons, tagline, genres: [names], providers: [{ id, name }], imdbId,
  *     wikidataId, trailer (YouTube key) }
+ * Search answer (search, personTitles): { items: [item], people: [person] }, a person being
+ *   { key: 'person:123', id, type: 'person', title (the name), photo, dept, known: [item] }
  */
 (function () {
   'use strict';
@@ -39,9 +41,10 @@
   var active = 0, queue = [];
   var MAX_PARALLEL = 4;
 
-  function xhrJSON(url, headers) {
+  // urgent: ahead of everything waiting (the search screen; the rest is background work).
+  function xhrJSON(url, headers, urgent) {
     return new Promise(function (resolve, reject) {
-      queue.push(function () {
+      queue[urgent ? 'unshift' : 'push'](function () {
         var x = new XMLHttpRequest();
         x.open('GET', url, true);
         x.timeout = 12000;
@@ -91,13 +94,14 @@
     return p;
   }
 
+  function authHeaders() {
+    return { Authorization: 'Bearer ' + CFG.tmdbToken, Accept: 'application/json' };
+  }
+
   function tmdb(path, params, ttl, shape) {
     var q = qs(params || {});
     return cached('tmdb' + path + '?' + q, ttl || TTL, function () {
-      return xhrJSON(API + path + (q ? '?' + q : ''), {
-        Authorization: 'Bearer ' + CFG.tmdbToken,
-        Accept: 'application/json'
-      }).then(shape || function (x) { return x; });
+      return xhrJSON(API + path + (q ? '?' + q : ''), authHeaders()).then(shape || function (x) { return x; });
     });
   }
 
@@ -227,6 +231,103 @@
     }).catch(function () { return ''; });
   }
 
+  // ---------- search (the "Buscar" screen, js/search.js) ----------
+  // Asked while the user types, so the answers are kept in memory only (every prefix in
+  // localStorage would crowd out the row cache) and the requests go to the front of the
+  // queue, before the background work. f: { text, cat: { movie, tv } | null,
+  // year: { from, to } | null }.
+  //   text, no filter:   /search/multi (films, series and people in one answer)
+  //   text and filter:   /search/movie + /search/tv (one year: primary_release_year /
+  //                      first_air_date_year); the genre and a range of years are checked on
+  //                      the answer (Smart.searchRows)
+  //   no text, filter:   /discover/movie + /discover/tv by popularity, with with_genres and
+  //                      the release dates, without the anime keyword
+  // A type the category does not exist for (a TV-only genre) is not asked.
+  var live = {}, liveKeys = [];
+  var LIVE_MAX = 60;
+
+  function tmdbLive(path, params, shape) {
+    var url = API + path + '?' + qs(params);
+    if (live[url]) return live[url];
+    var p = xhrJSON(url, authHeaders(), true).then(shape);
+    live[url] = p;
+    liveKeys.push(url);
+    if (liveKeys.length > LIVE_MAX) delete live[liveKeys.shift()];
+    p.then(null, function () { if (live[url] === p) delete live[url]; });   // asked again next time
+    return p;
+  }
+
+  function searchTypes(f) {
+    return ['movie', 'tv'].filter(function (t) { return !f.cat || f.cat[t]; });
+  }
+
+  function searchParams(type, f) {
+    var p = { language: LANG, include_adult: 'false', page: 1 };
+    var y = f.year || {};
+    if (f.text) {
+      p.query = f.text;
+      if (y.from && y.from === y.to) p[type === 'movie' ? 'primary_release_year' : 'first_air_date_year'] = y.from;
+      return p;
+    }
+    var date = type === 'movie' ? 'primary_release_date' : 'first_air_date';
+    p.sort_by = 'popularity.desc';
+    p.with_genres = f.cat ? f.cat[type] : '';
+    p[date + '.gte'] = y.from ? y.from + '-01-01' : '';
+    p[date + '.lte'] = y.to ? y.to + '-12-31' : '';
+    p['vote_count.gte'] = 20;          // no empty pages of unknown titles
+    p.without_keywords = HIDE_ANIME ? ANIME_KEYWORD : '';
+    return p;
+  }
+
+  function shapePerson(r) {
+    return {
+      key: 'person:' + r.id, id: r.id, type: 'person', title: r.name || '',
+      photo: img(r.profile_path, 'w185'), dept: r.known_for_department || '',
+      known: (r.known_for || []).map(function (k) { return shapeItem(k); }).filter(Boolean)
+    };
+  }
+
+  // /search/multi: titles with a poster, people with a photo.
+  function shapeSearch(res) {
+    var items = [], people = [];
+    (res.results || []).forEach(function (r) {
+      if (r.media_type === 'person') { if (r.profile_path) people.push(shapePerson(r)); return; }
+      var it = shapeItem(r);
+      if (it && it.title && it.poster) items.push(it);
+    });
+    return { items: items, people: people };
+  }
+
+  function searchTmdb(f) {
+    if (f.text && !f.cat && !f.year) {
+      return tmdbLive('/search/multi', { language: LANG, query: f.text, include_adult: 'false', page: 1 }, shapeSearch);
+    }
+    return Promise.all(searchTypes(f).map(function (t) {
+      return tmdbLive((f.text ? '/search/' : '/discover/') + t, searchParams(t, f), shapeList(t));
+    })).then(function (lists) { return { items: [].concat.apply([], lists), people: [] }; });
+  }
+
+  // A person's films and series (OK on a person): acting (not as themselves) and directing,
+  // best known first. Talk shows and news are left out.
+  function shapeCredits(res) {
+    var list = (res.cast || []).filter(function (c) { return !/^(self|himself|herself)\b/i.test(c.character || ''); })
+      .concat((res.crew || []).filter(function (c) { return c.job === 'Director' || c.job === 'Creator'; }));
+    var seen = {}, items = [];
+    list.forEach(function (r) {
+      var it = shapeItem(r);
+      if (!it || !it.poster || seen[it.key]) return;
+      if (it.type === 'tv' && (it.genreIds.indexOf(10767) !== -1 || it.genreIds.indexOf(10763) !== -1)) return;
+      seen[it.key] = true;
+      items.push(it);
+    });
+    items.sort(function (a, b) { return b.votes - a.votes; });
+    return { items: items.slice(0, 60), people: [] };
+  }
+
+  function personTitlesTmdb(person) {
+    return tmdbLive('/person/' + person.id + '/combined_credits', { language: LANG }, shapeCredits);
+  }
+
   // ---------- per-service title ids (Wikidata) ----------
   // TMDB gives the Wikidata item of a title (external_ids.wikidata_id, already in the
   // details); Wikidata holds the title's id on Netflix, Disney+, Max & co. (see js/deeplink.js).
@@ -286,8 +387,31 @@
       key: t.type + ':' + t.id, id: t.id, type: t.type, title: t.title, year: String(t.year),
       overview: t.overview, poster: '', backdrop: 'mock/bd-' + t.palette + '.jpg',
       rating: t.rating, votes: t.votes, popularity: t.popularity, genreIds: t.genres,
-      palette: t.palette
+      lang: t.lang || '', countries: t.countries || [], palette: t.palette
     };
+  }
+
+  function mockPerson(p) {
+    return {
+      key: 'person:' + p.id, id: p.id, type: 'person', title: p.name, photo: '', dept: p.dept || '',
+      palette: p.palette, known: p.credits.map(function (k) { return mockItem(MOCK.byKey[k]); })
+    };
+  }
+
+  // Titles whose name has the text (accents and case ignored); with no text, all of them (the
+  // filter is applied by Smart.searchRows, as for TMDB's answers). People: by name.
+  function searchMock(f) {
+    var q = window.Smart.norm(f.text || '');
+    function has(name) { return window.Smart.norm(name).indexOf(q) !== -1; }
+    var items = MOCK.titles.filter(function (t) { return !q || has(t.title); })
+      .sort(function (a, b) { return b.popularity - a.popularity; }).map(mockItem);
+    var people = q && !f.cat && !f.year ? MOCK.people.filter(function (p) { return has(p.name); }).map(mockPerson) : [];
+    return Promise.resolve({ items: items, people: people });
+  }
+
+  function personTitlesMock(person) {
+    var p = MOCK.people.filter(function (x) { return x.id === person.id; })[0];
+    return Promise.resolve({ items: p ? p.credits.map(function (k) { return mockItem(MOCK.byKey[k]); }) : [], people: [] });
   }
 
   function mockProviders(t) {
@@ -334,8 +458,10 @@
   // ---------- public ----------
 
   var mockImpl = { discover: discoverMock, recommendations: recommendationsMock, details: detailsMock,
-    genres: function () { return Promise.resolve(MOCK.genreNames); } };
-  var tmdbImpl = { discover: discoverTmdb, recommendations: recommendationsTmdb, details: detailsTmdb, genres: genresTmdb };
+    genres: function () { return Promise.resolve(MOCK.genreNames); },
+    search: searchMock, personTitles: personTitlesMock };
+  var tmdbImpl = { discover: discoverTmdb, recommendations: recommendationsTmdb, details: detailsTmdb, genres: genresTmdb,
+    search: searchTmdb, personTitles: personTitlesTmdb };
 
   // Browser preview with a token: a failed fetch (offline, no cache) falls back to the mock.
   function withFallback(name) {
@@ -349,8 +475,25 @@
 
   var impl = mode === 'mock' ? mockImpl
     : browser ? { discover: withFallback('discover'), recommendations: withFallback('recommendations'),
-        details: withFallback('details'), genres: withFallback('genres') }
+        details: withFallback('details'), genres: withFallback('genres'),
+        search: withFallback('search'), personTitles: withFallback('personTitles') }
     : tmdbImpl;
+
+  // The last answers of the search screen by query and filter, so a letter deleted (or a
+  // filter set back) shows its results at once, without waiting for the debounce.
+  var answers = {}, answerKeys = [];
+  function searchKey(f) {
+    return JSON.stringify([f.text || '', f.cat ? [f.cat.movie, f.cat.tv] : 0, f.year ? [f.year.from, f.year.to] : 0]);
+  }
+  function search(f) {
+    if (mode === 'off') return Promise.resolve({ items: [], people: [] });
+    var k = searchKey(f);
+    return impl.search(f).then(function (v) {
+      if (!answers[k]) { answerKeys.push(k); if (answerKeys.length > LIVE_MAX) delete answers[answerKeys.shift()]; }
+      answers[k] = v;
+      return v;
+    });
+  }
 
   // Every title list goes through the anime filter (cached answers too).
   function noAnime(fn) {
@@ -366,6 +509,9 @@
     genres: impl.genres,
     imdbRating: imdbRating,
     serviceIds: serviceIds,
+    search: search,
+    searchKnown: function (f) { return answers[searchKey(f)] || null; },
+    personTitles: function (p) { return mode === 'off' ? Promise.resolve({ items: [], people: [] }) : impl.personTitles(p); },
     hasImdb: mode === 'mock' || !!CFG.omdbKey
   };
 })();

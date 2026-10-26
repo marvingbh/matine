@@ -675,6 +675,7 @@
       rowIndex: function () { return ui.r; },
       rowCount: function () { return ui.rows.length; },
       showItem: showItem,
+      cardNode: cardNode,      // a poster card, for the search screen (js/search.js)
       staleHero: staleHero,
       backdropUrl: backdropUrl,
       restoreRow: restoreRow,

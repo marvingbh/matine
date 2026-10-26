@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-/* Unit checks for js/smart.js (provider mapping, history, taste profile, ranking, mood, anime),
-   js/deeplink.js (Wikidata ids, deep-link launch requests) and js/catalog.js's anime filter.
+/* Unit checks for js/smart.js (provider mapping, history, taste profile, ranking, mood, anime,
+   search rows and filters), js/deeplink.js (Wikidata ids, deep-link launch requests) and
+   js/catalog.js (anime filter, search requests).
    Run: node tools/test-smart.js   (no dependencies; not packaged) */
 'use strict';
 var assert = require('assert');
@@ -290,6 +291,64 @@ test('anime: Japanese animation is dropped, other animation and Japanese live ac
   assert.deepStrictEqual(Smart.dropAnime([anime, pixar, animeFilm, liveAction]).map(function (x) { return x.id; }), [34, 35]);
 });
 
+// ---------- search (js/search.js uses these) ----------
+
+test('search rows: films and series apart, anime and "Já vi" left out, people kept', function () {
+  var h = Smart.emptyHistory();
+  var seen = item('movie', 41, 'Duna', [878], { year: '2021' });
+  Smart.markWatched(h, seen, NOW);
+  var res = { items: [
+    item('tv', 40, 'Frieren', [16, 10765], { lang: 'ja', countries: ['JP'] }),
+    seen,
+    item('movie', 42, 'Duna: Parte Dois', [878], { year: '2024' }),
+    item('tv', 43, 'Duna: A Profecia', [10765], { year: '2024' }),
+    item('movie', 42, 'Duna: Parte Dois', [878])                       // twice in the answer
+  ], people: [
+    { key: 'person:1', type: 'person', title: 'Denis Villeneuve', known: [seen] },
+    { key: 'person:2', type: 'person', title: 'Dublador', known: [item('tv', 40, 'Frieren', [16], { lang: 'ja' })] }
+  ] };
+  function watched(k) { return Smart.statusOf(h, k) === 'watched'; }
+  var rows = Smart.searchRows(res, watched, true, null);
+  assert.deepStrictEqual(rows.map(function (r) { return r.id + '=' + r.items.map(function (x) { return x.key; }).join(','); }),
+    ['movie=movie:42', 'tv=tv:43', 'people=person:1']);
+  var all = Smart.searchRows(res, watched, false, null);
+  assert.strictEqual(all[1].items[0].key, 'tv:40', 'hideAnime off keeps anime');
+  assert.strictEqual(all[2].items.length, 2);
+  assert.deepStrictEqual(Smart.searchRows(null, watched, true, null), []);
+});
+
+test('search filter: category per type, single year and ranges; no people with a filter', function () {
+  var res = { items: [
+    item('movie', 1, 'Ficção 2024', [878], { year: '2024' }), item('movie', 2, 'Drama 2015', [18], { year: '2015' }),
+    item('tv', 3, 'Série sci-fi 2016', [10765], { year: '2016' }), item('tv', 4, 'Reality 2016', [10764], { year: '2016' }),
+    item('movie', 5, 'Antigo', [878], { year: '1968' }), item('movie', 6, 'Sem ano', [878], { year: '' })
+  ], people: [{ key: 'person:9', type: 'person', title: 'X' }] };
+  function keys(f) {
+    return Smart.searchRows(res, null, true, f).map(function (r) { return r.items.map(function (x) { return x.id; }).join(','); });
+  }
+  assert.deepStrictEqual(keys({ cat: { movie: 878, tv: 10765 }, year: null }), ['1,5,6', '3']);
+  assert.deepStrictEqual(keys({ cat: { movie: null, tv: 10764 }, year: null }), ['4'], 'a TV-only category: no film row');
+  assert.deepStrictEqual(keys({ cat: null, year: { from: 2010, to: 2019 } }), ['2', '3,4']);
+  assert.deepStrictEqual(keys({ cat: { movie: 878, tv: 10765 }, year: { from: null, to: 1989 } }), ['5']);
+  assert.deepStrictEqual(keys({ cat: null, year: { from: 2024, to: 2024 } }), ['1']);
+});
+
+test('search categories: one per genre, with its film and TV id; TV-only genres apart', function () {
+  var cats = Smart.searchCategories({
+    movie: { 28: 'Ação', 12: 'Aventura', 18: 'Drama', 27: 'Terror', 878: 'Ficção científica' },
+    tv: { 10759: 'Ação e Aventura', 18: 'Drama', 10765: 'Ficção científica e Fantasia', 10764: 'Reality' }
+  });
+  var by = {};
+  cats.forEach(function (c) { by[c.name] = [c.movie, c.tv]; });
+  assert.deepStrictEqual(cats.map(function (c) { return c.name; }), ['Ação', 'Aventura', 'Drama', 'Ficção científica', 'Reality', 'Terror']);
+  assert.deepStrictEqual(by['Ação'], [28, 10759]);
+  assert.deepStrictEqual(by['Aventura'], [12, 10759]);
+  assert.deepStrictEqual(by['Ficção científica'], [878, 10765]);
+  assert.deepStrictEqual(by.Terror, [27, null], 'no horror genre for series');
+  assert.deepStrictEqual(by.Reality, [null, 10764]);
+  assert.deepStrictEqual(Smart.searchCategories(null), []);
+});
+
 // catalog.js in a sandbox with a fake XMLHttpRequest: what it asks TMDB and what it returns.
 function catalogWith(cfg, answer) {
   var urls = [];
@@ -342,6 +401,49 @@ testAsync('catalog: hideAnime false keeps anime', function () {
   return t.Catalog.discover({ type: 'tv' }).then(function (list) {
     assert.ok(t.urls[0].indexOf('without_keywords') === -1, t.urls[0]);
     assert.strictEqual(list.length, 3);
+  });
+});
+
+testAsync('catalog search: text alone asks /search/multi; people with a photo, titles with a poster', function () {
+  var t = catalogWith({ tmdbToken: 'test' }, { results: [
+    { id: 7, media_type: 'person', name: 'Fernanda Torres', profile_path: '/f.jpg', known_for_department: 'Acting', known_for: [{ id: 1, media_type: 'movie', title: 'Ainda Estou Aqui' }] },
+    { id: 8, media_type: 'person', name: 'Sem foto' },
+    { id: 1, media_type: 'movie', title: 'Ainda Estou Aqui', poster_path: '/a.jpg', release_date: '2024-11-07', genre_ids: [18] },
+    { id: 2, media_type: 'tv', name: 'Sem pôster' }
+  ] });
+  return t.Catalog.search({ text: 'ainda estou', cat: null, year: null }).then(function (res) {
+    assert.ok(/\/search\/multi\?/.test(t.urls[0]) && /query=ainda%20estou/.test(t.urls[0]) && /language=pt-BR/.test(t.urls[0]), t.urls[0]);
+    assert.strictEqual(JSON.stringify(res.people.map(function (p) { return p.title; })), '["Fernanda Torres"]');
+    assert.strictEqual(titles(res.items), '["Ainda Estou Aqui"]');
+    assert.ok(t.Catalog.searchKnown({ text: 'ainda estou', cat: null, year: null }), 'kept for a letter deleted later');
+  });
+});
+
+testAsync('catalog search: text + filter -> /search/movie and /search/tv with the year', function () {
+  var t = catalogWith({ tmdbToken: 'test' }, { results: [] });
+  return t.Catalog.search({ text: 'duna', cat: { movie: 878, tv: 10765 }, year: { from: 2024, to: 2024 } }).then(function () {
+    var mv = t.urls.filter(function (u) { return u.indexOf('/search/movie?') !== -1; })[0];
+    var tv = t.urls.filter(function (u) { return u.indexOf('/search/tv?') !== -1; })[0];
+    assert.ok(/primary_release_year=2024/.test(mv) && /query=duna/.test(mv), mv);
+    assert.ok(/first_air_date_year=2024/.test(tv), tv);
+    assert.ok(mv.indexOf('with_genres') === -1, 'genres are checked on the answer');
+  });
+});
+
+testAsync('catalog search: no text + filters -> /discover with genres, dates and no anime; one type for a TV-only genre', function () {
+  var t = catalogWith({ tmdbToken: 'test' }, { results: [] });
+  return t.Catalog.search({ text: '', cat: { movie: 878, tv: 10765 }, year: { from: 2010, to: 2019 } }).then(function () {
+    var mv = t.urls.filter(function (u) { return u.indexOf('/discover/movie?') !== -1; })[0];
+    var tv = t.urls.filter(function (u) { return u.indexOf('/discover/tv?') !== -1; })[0];
+    assert.ok(/with_genres=878/.test(mv) && /primary_release_date\.gte=2010-01-01/.test(mv) && /primary_release_date\.lte=2019-12-31/.test(mv), mv);
+    assert.ok(/sort_by=popularity\.desc/.test(mv) && /without_keywords=210024/.test(mv), mv);
+    assert.ok(/with_genres=10765/.test(tv) && /first_air_date\.gte=2010-01-01/.test(tv) && /first_air_date\.lte=2019-12-31/.test(tv), tv);
+    var n = t.urls.length;
+    return t.Catalog.search({ text: '', cat: { movie: null, tv: 10764 }, year: { from: null, to: 1989 } }).then(function () {
+      var more = t.urls.slice(n);
+      assert.strictEqual(more.length, 1, more.join(' '));
+      assert.ok(/\/discover\/tv\?/.test(more[0]) && /first_air_date\.lte=1989-12-31/.test(more[0]) && more[0].indexOf('first_air_date.gte') === -1, more[0]);
+    });
   });
 });
 

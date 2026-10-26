@@ -1,9 +1,10 @@
 /*
  * Home screen UI, laid out like the Apple TV (tvOS) home screen: a Top Shelf (the focused
  * app's suggestions over their artwork, full bleed), a grid of app tiles (5 per row), and
- * under it the poster rows. Also the top bar (Entradas, Wi-Fi, Ajustes), the Red menu, the
- * background photos, the clock and the weather, and the remote. The rows, the hero text for
- * a poster and the overlays are drawn by js/discover.js.
+ * under it the poster rows. Also the top bar (Buscar, Entradas, Wi-Fi, Ajustes), the Red
+ * menu, the background photos, the clock and the weather, and the remote. The rows, the hero
+ * text for a poster and the overlays are drawn by js/discover.js; the search screen by
+ * js/search.js.
  *
  * Discovery is one vertical list of rows in pairs, films then series for each category
  * ("Continuar assistindo", "Filmes para você", …). Vertical focus is one loop: top bar →
@@ -15,8 +16,8 @@
  * (a poster focused: the hero shows it, the grid is gone).
  *
  * Zones (where focus is): 'list' (app list), 'rows' (posters), 'menu', 'bar' (top bar),
- * 'inputs' (its Entradas panel), 'tvwin' (an input shown inside the app, Samsung) and the
- * overlays 'details' and 'chooser'. Views: 'home', 'all' (Todos os apps), 'mine' (Minha
+ * 'inputs' (its Entradas panel), 'search' (the Buscar screen), 'tvwin' (an input shown inside
+ * the app, Samsung) and the overlays 'details' and 'chooser'. Views: 'home', 'all' (Todos os apps), 'mine' (Minha
  * lista), 'ids'.
  */
 (function () {
@@ -52,8 +53,9 @@
 
   var state = {
     view: 'home',          // 'home' | 'all' | 'mine' | 'ids'
-    zone: 'list',          // 'list' | 'rows' | 'menu' | 'bar' | 'inputs' | 'tvwin' | 'details' | 'chooser'
+    zone: 'list',          // 'list' | 'rows' | 'menu' | 'bar' | 'inputs' | 'search' | 'tvwin' | 'details' | 'chooser'
     barFrom: 'list',       // where the top bar was entered from ('list' | 'rows'): Down returns there
+    searchFrom: null,      // where the search screen was opened from ('bar' | 'list' | 'rows'): Back returns there
     inputs: null,          // the Entradas panel: { items: [...], i } while open
     home: [],              // items: { key, name, ids, iconPath, kind }
     apps: [],              // the installed home apps
@@ -368,7 +370,7 @@
     var n = tiles.length;
     var mode = currentMode();
     var body = document.body;
-    body.setAttribute('data-zone', baseZone());
+    body.setAttribute('data-zone', state.zone === 'details' || state.zone === 'chooser' ? state.zone : baseZone());
     if (body.getAttribute('data-mode') !== mode) body.setAttribute('data-mode', mode);
     if (state.zone === 'bar' || state.zone === 'inputs') body.setAttribute('data-bar', state.zone);
     else body.removeAttribute('data-bar');
@@ -541,10 +543,94 @@
       renderHints();
     },
     onClose: function () {
+      // Opened from a search result: back to the search, the results filtered again (a mark).
+      if (search.isOpen()) { state.zone = 'search'; updateFocus(); search.refresh(); return; }
       state.zone = discover.hasRows() ? 'rows' : (state.view === 'mine' ? 'menu' : 'list');
       layout();
     }
   });
+
+  // ---------- Buscar (the search screen, js/search.js) ----------
+  // Over everything but the details: OK on a result opens the same details, "Abrir em…" and
+  // launch as a poster in the rows (discover.openDetails / discover.open with the item).
+
+  var search = window.SearchUI({
+    catalog: Catalog,
+    cardNode: discover.cardNode,
+    isWatched: function (k) { return Smart.statusOf(state.history, k) === 'watched'; },
+    hideAnime: CFG.hideAnime !== false,
+    genres: function () { return state.genres; },
+    // With nothing typed: the "em alta" rows of the home screen (no network).
+    suggestions: function () { return (state.built.home || []).filter(function (r) { return r.cat === 'popular'; }); },
+    toast: toast
+  });
+
+  var searchOk = false;      // an OK keyup since the search opened: the press that opened it does not type
+
+  function openSearch() {
+    closeInputs();
+    state.searchFrom = state.zone === 'inputs' ? 'bar' : state.zone;
+    state.zone = 'search';
+    searchOk = false;
+    search.open();
+    updateFocus();
+  }
+
+  // Back to where the search was opened from (the Buscar pill, a tile or a poster).
+  function closeSearch() {
+    search.close();
+    state.zone = state.searchFrom || 'list';
+    state.searchFrom = null;
+    if (state.zone === 'rows' && !discover.hasRows()) state.zone = 'list';
+    if (state.shelf) state.shelf.key = null;      // repaint the Top Shelf and its artwork
+    layout();
+    if (state.zone === 'rows') discover.goRow(discover.rowIndex());   // the poster's artwork again
+  }
+
+  // OK on a result: a person shows their titles; a title its details (short press) or its
+  // app (long press), through the same code as the poster rows.
+  function openResult(it, long) {
+    if (!it) return;
+    if (it.type === 'person') { search.openPerson(it); return; }
+    if (long) { discover.open(it); return; }
+    showBackground(discover.backdropUrl(it.backdrop) || landscape());
+    discover.openDetails(it);
+  }
+
+  // A letter, digit or space typed on a real keyboard (desktop browser) or with the remote's
+  // number keys (LG); '' for any other key.
+  function typedChar(e) {
+    var ch = e.key && e.key.length === 1 ? e.key.toLowerCase() : '';
+    if (!ch) {
+      var k = e.keyCode;
+      if (k >= 65 && k <= 90) ch = String.fromCharCode(k + 32);
+      else if (k >= 48 && k <= 57) ch = String.fromCharCode(k);
+      else if (k >= 96 && k <= 105) ch = String.fromCharCode(k - 48);     // numeric keypad
+      else if (k === 32) ch = ' ';
+    }
+    return /^[a-z0-9 \u00e0-\u00ff]$/.test(ch) ? ch : '';
+  }
+
+  function searchKey(e) {
+    var k = e.keyCode;
+    if (k === KEY.ENTER) {
+      if (search.focused()) okDown();
+      else if (searchOk) search.press();
+      return true;
+    }
+    if (k === KEY.BACK || k === 27) { if (!search.back()) closeSearch(); return true; }
+    if (k === 8) { if (!search.erase() && !search.back()) closeSearch(); return true; }   // Backspace: a letter first
+    if (k === KEY.LEFT) search.move(-1, 0);
+    else if (k === KEY.RIGHT) search.move(1, 0);
+    else if (k === KEY.UP) search.move(0, -1);
+    else if (k === KEY.DOWN) search.move(0, 1);
+    else {
+      var ch = typedChar(e);
+      if (!ch) return false;
+      search.type(ch);
+    }
+    return true;
+  }
 
   // Installed apps a title is on, most used first; null while not known yet.
   function appsOf(it) {
@@ -630,8 +716,12 @@
 
   // The top bar and its panel keep the look of the zone they were entered from (the posters
   // stay full screen when it was entered from them); body[data-bar] marks their focus.
+  // The search screen keeps the look of where it was opened from, also while the details of
+  // a result are open over it.
   function baseZone() {
-    return state.zone === 'bar' || state.zone === 'inputs' ? state.barFrom : state.zone;
+    var z = state.zone;
+    if (z === 'search' || (search.isOpen() && (z === 'details' || z === 'chooser'))) z = state.searchFrom || 'list';
+    return z === 'bar' || z === 'inputs' ? state.barFrom : z;
   }
 
   // The mode of the rows (peek under the grid / full), the Top Shelf and the background
@@ -1148,7 +1238,7 @@
   // Back returns there; Up goes on round the loop to the last app (or row). Left/Right move
   // between the pills. Every action fails soft: a toast when the TV refuses.
 
-  var BAR = ['inputs', 'network', 'settings'];
+  var BAR = ['search', 'inputs', 'network', 'settings'];
 
   function enterBar(from) {
     state.barFrom = from;
@@ -1178,6 +1268,7 @@
   }
 
   function barAction(a) {
+    if (a === 'search') { openSearch(); return; }
     if (a === 'inputs') { openInputs(); return; }
     if (a === 'settings') { menuAction({ action: 'settings' }); return; }
     toast('Abrindo as configurações de rede…');
@@ -1319,6 +1410,7 @@
     if (!press || press.done) return;
     press.done = true;
     clearTimeout(press.timer);
+    if (state.zone === 'search') { openResult(search.focused(), long); return; }
     if (state.zone !== 'rows') return;
     if (long) discover.open(); else openDetails();
   }
@@ -1375,7 +1467,7 @@
   }
 
   document.addEventListener('keyup', function (e) {
-    if (e.keyCode === KEY.ENTER) okUp();
+    if (e.keyCode === KEY.ENTER) { okUp(); searchOk = true; }
     if (e.keyCode === extra.ColorF1Green || e.keyCode === 71) { green.held = false; clearTimeout(green.timer); }
   });
 
@@ -1402,6 +1494,11 @@
       if (k === KEY.ENTER && press) { e.preventDefault(); return; }
       if (overlayKey(k)) e.preventDefault();
       return;
+    }
+    if (state.zone === 'search') { if (searchKey(e)) e.preventDefault(); return; }
+    // S or / on a real keyboard: the search, from the app grid or the posters.
+    if ((k === 83 || k === 191) && (state.zone === 'list' || state.zone === 'rows') && state.view !== 'ids') {
+      openSearch(); e.preventDefault(); return;
     }
     if (state.zone === 'rows') {
       if (k === KEY.ENTER) { okDown(); e.preventDefault(); return; }
@@ -1492,7 +1589,7 @@
   showBackground(landscape());
   if (!P.isTV) {
     el.mock.textContent = (Catalog.mode === 'mock' ? 'Pré-visualização com dados de exemplo' : 'Pré-visualização no navegador') +
-      ' · setas, Enter = detalhes (segure = abrir no app), Esc, G = já vi, Y = desfazer / IDs, R = menu, B = todos os apps';
+      ' · setas, Enter = detalhes (segure = abrir no app), Esc, G = já vi, Y = desfazer / IDs, R = menu, B = todos os apps, S = buscar';
     el.mock.hidden = false;
   }
   Weather.start(showWeather);
@@ -1509,6 +1606,7 @@
     state.launching = false;
     discover.closeOverlay();
     closeInputs();
+    if (search.isOpen()) { search.close(); state.zone = state.view === 'mine' ? 'rows' : 'list'; }
     if (state.zone === 'tvwin') hideInputWindow();
     showNetwork();
     if (state.view === 'home') state.zone = 'list';
