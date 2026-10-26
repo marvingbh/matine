@@ -400,6 +400,23 @@ test('Asian titles: dropped by original language, or origin country when given; 
   assert.deepStrictEqual(rows.map(function (r) { return r.id + '=' + r.items.length; }), ['tv=1']);
 });
 
+test('Novidades: windows (films 90 days, series 60), order newest first, Estreia vs Nova temporada', function () {
+  var now = new Date(2026, 9, 26, 15, 0, 0).getTime();
+  var mv = Smart.newArrivals('movie', now);
+  assert.deepStrictEqual([mv.releaseFrom, mv.releaseTo, mv.releaseTypes.join('|'), mv.minVotes, mv.monetization],
+    ['2026-07-28', '2026-10-26', '4|5|6', 10, 'flatrate|free|ads']);
+  var fb = Smart.newArrivals('movie', now, true);
+  assert.deepStrictEqual([fb.primaryFrom, fb.primaryTo, fb.releaseFrom], ['2026-07-28', '2026-10-26', undefined]);
+  var tv = Smart.newArrivals('tv', now);
+  assert.deepStrictEqual([tv.airFrom, tv.airTo, tv.sort], ['2026-08-27', '2026-10-26', 'popularity.desc']);
+  var films = Smart.newOrder([item('movie', 1, 'Antigo', [], { date: '2026-03-01', popularity: 900 }),
+    item('movie', 2, 'Novo', [], { date: '2026-09-30', popularity: 10 })], mv);
+  assert.deepStrictEqual(films.map(function (x) { return x.id; }), [2, 1]);
+  var shows = Smart.newOrder([item('tv', 3, 'Volta', [], { date: '2019-05-01', popularity: 50 }),
+    item('tv', 4, 'Estreia', [], { date: '2026-09-10', popularity: 80 })], tv);
+  assert.deepStrictEqual(shows.map(function (x) { return x.id + ' ' + x.reason; }), ['4 Estreia', '3 Nova temporada']);
+});
+
 // catalog.js in a sandbox with a fake XMLHttpRequest: what it asks TMDB and what it returns.
 function catalogWith(cfg, answer) {
   var urls = [];
@@ -537,6 +554,30 @@ testAsync('catalog: a discover page thinned by the filter is topped up once with
     return t.Catalog.discover({ type: 'tv', providers: [8], page: 2 });
   }).then(function () {
     assert.strictEqual(t.urls.length, 2, 'page 2 is cached and not topped up again');
+  });
+});
+
+testAsync('catalog: Novidades -> discover with release types / air dates on the app, flatrate|free|ads', function () {
+  var t = catalogWith({ tmdbToken: 'test' }, { results: [] });
+  var now = new Date(2026, 9, 26, 15, 0, 0).getTime();
+  var mq = Smart.newArrivals('movie', now); mq.providers = [8];
+  var tq = Smart.newArrivals('tv', now); tq.providers = [337, 619];
+  return Promise.all([t.Catalog.discover(mq), t.Catalog.discover(tq)]).then(function () {
+    var mv = t.urls.filter(function (u) { return u.indexOf('/discover/movie?') !== -1; })[0];
+    var tv = t.urls.filter(function (u) { return u.indexOf('/discover/tv?') !== -1; })[0];
+    assert.ok(/release_date\.gte=2026-07-28/.test(mv) && /release_date\.lte=2026-10-26/.test(mv) && /with_release_type=4%7C5%7C6/.test(mv), mv);
+    assert.ok(/region=BR/.test(mv) && /watch_region=BR/.test(mv) && /with_watch_providers=8(&|$)/.test(mv), mv);
+    assert.ok(/with_watch_monetization_types=flatrate%7Cfree%7Cads/.test(mv) && /vote_count\.gte=10/.test(mv), mv);
+    assert.ok(mv.indexOf('primary_release_date') === -1 && mv.indexOf('air_date') === -1, mv);
+    assert.ok(/air_date\.gte=2026-08-27/.test(tv) && /air_date\.lte=2026-10-26/.test(tv) && /with_watch_providers=337%7C619/.test(tv), tv);
+    assert.ok(tv.indexOf('release_date') === -1 && tv.indexOf('first_air_date') === -1, tv);
+  });
+});
+
+testAsync('catalog: rows keep flatrate only unless asked', function () {
+  var t = catalogWith({ tmdbToken: 'test' }, { results: [] });
+  return t.Catalog.discover({ type: 'movie', providers: [8] }).then(function () {
+    assert.ok(/with_watch_monetization_types=flatrate(&|$)/.test(t.urls[0]), t.urls[0]);
   });
 });
 

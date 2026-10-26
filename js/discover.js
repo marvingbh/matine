@@ -151,7 +151,8 @@
 
     // The score sits on the card, top right ("★ 7,8"): text drawn with the card, no layer of
     // its own (Smart.cardScore leaves it out for titles with no score or too few votes).
-    function cardNode(it) {
+    // withApp: the app it is on, top left, when known ("Novidades" rows, the search).
+    function cardNode(it, withApp) {
       var st = opts.statusOf(it.key);
       var score = Smart.cardScore(it);
       var pal = typeof it.palette === 'number' ? it.palette : (it.id % 8);
@@ -170,6 +171,14 @@
       if (img) {
         img.onload = function () { this.className = 'poster__img is-loaded'; };
         img.onerror = function () { this.parentNode.removeChild(this); };
+      }
+      var apps = withApp && st !== 'want' ? opts.appsOf(it) : null;
+      if (apps && apps.length) {
+        var tag = document.createElement('span');
+        tag.className = 'poster__app';
+        tag.textContent = apps[0].name + (apps.length > 1 ? ' +' + (apps.length - 1) : '');
+        d.firstChild.appendChild(tag);
+        d.appLabel = true;
       }
       return d;
     }
@@ -197,7 +206,7 @@
       });
       for (var c = lo; c < hi; c++) {
         if (m.cards[c]) continue;
-        var n = cardNode(row.items[c]);
+        var n = cardNode(row.items[c], row.cat === 'new');
         n.style.transform = tr(c * STEP, 0);
         m.track.appendChild(n);
         m.cards[c] = n;

@@ -862,17 +862,18 @@
     });
   }
 
-  var STABLE = { foryou: 1, mood: 1, popular: 1, top: 1 };
+  var STABLE = { 'new': 1, foryou: 1, mood: 1, popular: 1, top: 1 };
 
   // Categories in screen order; each one becomes a pair of rows, films then series.
-  var CATS = ['continue', 'foryou', 'want', 'mood', 'popular', 'top'];
+  // "Novidades nos streamings" comes right after what you were watching.
+  var CATS = ['continue', 'new', 'foryou', 'want', 'mood', 'popular', 'top'];
   var TYPES = ['movie', 'tv'];
   var PLURAL = { movie: 'Filmes', tv: 'Séries' };
 
   var LABEL = {
-    movie: { cont: 'Continuar assistindo · Filmes', want: 'Quero ver · Filmes', foryou: 'Filmes para você',
+    movie: { cont: 'Continuar assistindo · Filmes', fresh: 'Novidades nos streamings · Filmes', want: 'Quero ver · Filmes', foryou: 'Filmes para você',
       popular: 'Filmes em alta no Brasil', top: 'Filmes mais bem avaliados' },
-    tv: { cont: 'Continuar assistindo · Séries', want: 'Quero ver · Séries', foryou: 'Séries para você',
+    tv: { cont: 'Continuar assistindo · Séries', fresh: 'Novidades nos streamings · Séries', want: 'Quero ver · Séries', foryou: 'Séries para você',
       popular: 'Séries em alta no Brasil', top: 'Séries mais bem avaliadas' }
   };
 
@@ -887,6 +888,20 @@
       cont: Smart.dropHidden(Smart.continueList(state.history, now, 20, type), HIDE),
       want: Smart.dropHidden(Smart.titlesWith(state.history, ['want'], type), HIDE).slice(0, 20)
     };
+  }
+
+  // "Novidades nos streamings" for one type: one discover request per installed app (each
+  // title comes tagged with its apps, for the label on the card), newest first (Smart.newOrder).
+  // Films: the Brazilian digital/physical/TV release in the last 90 days; when that finds
+  // fewer than 6, the first release in the last 90 days instead.
+  var NEW_MIN = 6;
+  function newRow(type, now, seenEx) {
+    var q = Smart.newArrivals(type, now, false);
+    return byApp(q, 20, seenEx).then(function (list) {
+      if (type === 'tv' || list.length >= NEW_MIN) return Smart.newOrder(list, q);
+      var q2 = Smart.newArrivals(type, now, true);
+      return byApp(q2, 20, seenEx).then(function (more) { return Smart.newOrder(more.length > list.length ? more : list, q2); });
+    });
   }
 
   // The rows of one type, each with an id (cat-type) and a pure content type.
@@ -905,8 +920,10 @@
       forYou(state.profile, exclude, type),
       byApp(mood.query, 20, seenEx),
       byApp({ type: type, sort: 'popularity.desc', minVotes: 100 }, 20, seenEx),
-      byApp({ type: type, sort: 'vote_average.desc', minVotes: type === 'tv' ? 800 : 2000 }, 20, seenEx)
+      byApp({ type: type, sort: 'vote_average.desc', minVotes: type === 'tv' ? 800 : 2000 }, 20, seenEx),
+      newRow(type, now, seenEx)
     ]).then(function (r) {
+      rows.push(row('new', L.fresh, r[4], type === 'tv' ? 'estreias e novas temporadas nos seus apps' : 'chegaram há pouco nos seus apps'));
       rows.push(row('foryou', L.foryou, r[0], 'com base no que você abriu e marcou'));
       rows.push(row('mood', moodTitle(mood.title, type), r[1]));
       rows.push(row('popular', L.popular, r[2], 'nos seus apps'));

@@ -121,6 +121,7 @@
       type: type,
       title: r.title || r.name || '',
       year: date.slice(0, 4),
+      date: date,                          // first release / first air date (YYYY-MM-DD)
       overview: String(r.overview || '').slice(0, 420),
       poster: img(r.poster_path, 'w185'),     // details overlay uses w342
       backdrop: img(r.backdrop_path, 'w780'),
@@ -170,12 +171,14 @@
   // ---------- TMDB implementation ----------
 
   // q: { type, sort, providers: [ids], genres: [ids], minVotes, maxVotes, minRating,
-  //      runtimeMin, runtimeMax, tvType, page }
+  //      runtimeMin, runtimeMax, tvType, page, monetization ('flatrate' if not given),
+  //      releaseFrom/To + releaseTypes (films: regional release dates of those types),
+  //      primaryFrom/To (films: first release), airFrom/To (series: any episode aired) }
   function discoverTmdb(q) {
     var p = {
       language: LANG,
       watch_region: REGION,
-      with_watch_monetization_types: 'flatrate',
+      with_watch_monetization_types: q.monetization || 'flatrate',
       with_watch_providers: (q.providers || []).join('|'),
       with_genres: (q.genres || []).join('|'),
       sort_by: q.sort || 'popularity.desc',
@@ -189,8 +192,18 @@
     // with_runtime is the film length, or the episode length for series.
     p['with_runtime.gte'] = q.runtimeMin;
     p['with_runtime.lte'] = q.runtimeMax;
-    if (q.type === 'movie') p.region = REGION;
-    else p.with_type = q.tvType;        // 2 = miniseries
+    if (q.type === 'movie') {
+      p.region = REGION;
+      p['release_date.gte'] = q.releaseFrom;
+      p['release_date.lte'] = q.releaseTo;
+      p.with_release_type = (q.releaseTypes || []).join('|');
+      p['primary_release_date.gte'] = q.primaryFrom;
+      p['primary_release_date.lte'] = q.primaryTo;
+    } else {
+      p.with_type = q.tvType;           // 2 = miniseries
+      p['air_date.gte'] = q.airFrom;
+      p['air_date.lte'] = q.airTo;
+    }
     return tmdb('/discover/' + q.type, p, TTL, shapeList(q.type));
   }
 
@@ -394,7 +407,7 @@
 
   function mockItem(t) {
     return {
-      key: t.type + ':' + t.id, id: t.id, type: t.type, title: t.title, year: String(t.year),
+      key: t.type + ':' + t.id, id: t.id, type: t.type, title: t.title, year: String(t.year), date: t.year + '-06-01',
       overview: t.overview, poster: '', backdrop: 'mock/bd-' + t.palette + '.jpg',
       rating: t.rating, votes: t.votes, popularity: t.popularity, genreIds: t.genres,
       lang: t.lang || '', countries: t.countries || [], palette: t.palette
@@ -443,11 +456,17 @@
       if (q.runtimeMin && t.runtime < q.runtimeMin) return false;
       if (q.runtimeMax && t.runtime > q.runtimeMax) return false;
       if (q.tvType === 2 && t.seasons !== 1) return false;   // sample data: one season = miniseries
+      if ((q.releaseFrom || q.primaryFrom || q.airFrom) && t.year < 2024) return false;   // "new": 2024 on
       return true;
     });
+    var from = q.releaseFrom || q.primaryFrom || q.airFrom;
     var by = (q.sort || '').indexOf('vote_average') === 0 ? 'rating' : 'popularity';
     list.sort(function (a, b) { return b[by] - a[by]; });
-    return Promise.resolve(list.map(mockItem));
+    return Promise.resolve(list.map(function (t) {
+      var it = mockItem(t);
+      if (from && t.year >= 2025) it.date = from;       // sample data: 2025 on counts as just arrived
+      return it;
+    }));
   }
 
   function recommendationsMock(item) {

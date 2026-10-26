@@ -340,6 +340,42 @@
       { sort: 'vote_average.desc', minVotes: 150, maxVotes: 2500, minRating: 7.6 });
   }
 
+  // ---------- "Novidades nos streamings" ----------
+  // What arrived lately on the TV's apps, one discover request per app (like the other rows,
+  // so each title comes tagged with its apps). TMDB has no "added to the service on" date:
+  // films use their Brazilian digital / physical / TV release (release types 4, 5, 6) in
+  // the last 90 days, or (fallback, when that finds too little) the first release in the
+  // last 90 days; series anything aired in the last 60 days (new seasons and episodes too).
+
+  function isoDay(d) {
+    function two(n) { return n < 10 ? '0' + n : '' + n; }
+    return d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate());
+  }
+
+  // The discover query (catalog.js) for type 'movie' | 'tv' at time `now` (ms).
+  function newArrivals(type, now, fallback) {
+    function day(back) { return isoDay(new Date(now - back * DAY)); }
+    var q = { type: type, sort: 'popularity.desc', minVotes: 10, monetization: 'flatrate|free|ads' };
+    if (type === 'tv') { q.airFrom = day(60); q.airTo = day(0); }
+    else if (fallback) { q.primaryFrom = day(90); q.primaryTo = day(0); }
+    else { q.releaseFrom = day(90); q.releaseTo = day(0); q.releaseTypes = [4, 5, 6]; }
+    return q;
+  }
+
+  // The row's order: films newest first (by the date TMDB gives in lists, the first release),
+  // series by popularity, newest first on a tie. Series say whether they are new ("Estreia":
+  // first aired inside the window) or back ("Nova temporada"), shown as the hero's eyebrow.
+  function newOrder(items, q) {
+    var out = items.slice();
+    if (q.type === 'tv') {
+      out.sort(function (a, b) { return ((b.popularity || 0) - (a.popularity || 0)) || ((b.date || '') < (a.date || '') ? -1 : 1); });
+      out.forEach(function (it) { it.reason = it.date && it.date >= q.airFrom ? 'Estreia' : 'Nova temporada'; });
+    } else {
+      out.sort(function (a, b) { return (b.date || '') > (a.date || '') ? 1 : (b.date || '') < (a.date || '') ? -1 : (b.popularity || 0) - (a.popularity || 0); });
+    }
+    return out;
+  }
+
   // ---------- anime ----------
   // Japanese animation is left out of every TMDB row (config hideAnime, default on).
   // Discover calls also exclude TMDB's "anime" keyword (catalog.js); this check covers the
@@ -505,6 +541,9 @@
     mergeByApp: mergeByApp,
     stableOrder: stableOrder,
     moodFor: moodFor,
+    isoDay: isoDay,
+    newArrivals: newArrivals,
+    newOrder: newOrder,
     isRain: isRain,
     isAnime: isAnime,
     dropAnime: dropAnime,

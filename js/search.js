@@ -463,23 +463,25 @@
       schedule();
     }
 
-    // The app's name on a card (top left), once it is known; not over the "Na lista" badge.
+    // The app's name on a card (top left) once it is known: a card made before that is
+    // replaced by one with the label (js/discover.js cardNode), in place.
     function label(node, it) {
-      if (node.appLabel || !it) return;
+      if (node.appLabel || !it || !node.parentNode) return node;
       var apps = opts.appsOf(it);
-      if (!apps || !apps.length || node.querySelector('.poster__badge')) return;
-      var t = document.createElement('span');
-      t.className = 'poster__app';
-      t.textContent = apps[0].name + (apps.length > 1 ? ' +' + (apps.length - 1) : '');
-      node.firstChild.appendChild(t);
-      node.appLabel = true;
+      if (!apps || !apps.length) return node;
+      var n = opts.cardNode(it, true);
+      if (!n.appLabel) return node;
+      n.style.transform = node.style.transform;
+      if (node.classList.contains('is-focused')) { n.classList.add('is-focused'); s.cardFocus = n; }
+      node.parentNode.replaceChild(n, node);
+      return n;
     }
 
     function relabel() {
       s.mounted.forEach(function (m, i) {
         var row = s.rows[i];
         if (!row || row.id === 'people') return;
-        Object.keys(m.cards).forEach(function (c) { label(m.cards[c], row.items[c]); });
+        Object.keys(m.cards).forEach(function (c) { m.cards[c] = label(m.cards[c], row.items[c]); });
       });
     }
 
@@ -527,8 +529,7 @@
       });
       for (var c = lo; c < hi; c++) {
         if (m.cards[c]) continue;
-        var n = row.id === 'people' ? personNode(row.items[c]) : opts.cardNode(row.items[c]);
-        if (row.id !== 'people') label(n, row.items[c]);
+        var n = row.id === 'people' ? personNode(row.items[c]) : opts.cardNode(row.items[c], true);
         n.style.transform = tr(c * STEP, 0);
         m.track.appendChild(n);
         m.cards[c] = n;
