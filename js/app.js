@@ -1446,6 +1446,7 @@
     if (!press || press.done) return;
     press.done = true;
     clearTimeout(press.timer);
+    if (state.zone === 'details') { discover.similarPress(long); return; }    // a "Títulos semelhantes" card
     if (state.zone === 'search') { openResult(search.focused(), long); return; }
     if (state.zone !== 'rows') return;
     if (long) discover.open(); else openDetails();
@@ -1526,6 +1527,8 @@
     if (state.zone === 'inputs') { if (inputsKey(k)) e.preventDefault(); return; }
     if (state.zone === 'bar' && barKey(k)) { e.preventDefault(); return; }
     if (discover.overlay()) {
+      // OK on a "Títulos semelhantes" card: short = its details, held = its app.
+      if (k === KEY.ENTER && discover.onSimilar()) { okDown(); e.preventDefault(); return; }
       // Ignore the key repeats of the OK press that opened the details or the chooser.
       if (k === KEY.ENTER && press) { e.preventDefault(); return; }
       if (overlayKey(k)) e.preventDefault();

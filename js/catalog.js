@@ -211,6 +211,10 @@
     return tmdb('/' + item.type + '/' + item.id + '/recommendations', { language: LANG, page: 1 }, TTL, shapeList(item.type));
   }
 
+  function similarTmdb(item) {
+    return tmdb('/' + item.type + '/' + item.id + '/similar', { language: LANG, page: 1 }, TTL, shapeList(item.type));
+  }
+
   function detailsTmdb(item) {
     return tmdb('/' + item.type + '/' + item.id,
       { language: LANG, append_to_response: 'watch/providers,external_ids,videos',
@@ -526,6 +530,13 @@
     }).map(mockItem));
   }
 
+  // Sample "similar": the same genres, best rated first.
+  function similarMock(item) {
+    return recommendationsMock(item).then(function (list) {
+      return list.slice().sort(function (a, b) { return b.rating - a.rating; });
+    });
+  }
+
   function detailsMock(item) {
     var t = MOCK.byKey[item.key];
     if (!t) return Promise.resolve({ runtime: 0, seasons: 0, tagline: '', genres: [], providers: [], imdbId: '' });
@@ -541,9 +552,9 @@
 
   var mockImpl = { discover: discoverMock, recommendations: recommendationsMock, details: detailsMock,
     genres: function () { return Promise.resolve(MOCK.genreNames); },
-    search: searchMock, personTitles: personTitlesMock };
+    search: searchMock, personTitles: personTitlesMock, similar: similarMock };
   var tmdbImpl = { discover: discoverTmdb, recommendations: recommendationsTmdb, details: detailsTmdb, genres: genresTmdb,
-    search: searchTmdb, personTitles: personTitlesTmdb };
+    search: searchTmdb, personTitles: personTitlesTmdb, similar: similarTmdb };
 
   // Browser preview with a token: a failed fetch (offline, no cache) falls back to the mock.
   function withFallback(name) {
@@ -558,8 +569,23 @@
   var impl = mode === 'mock' ? mockImpl
     : browser ? { discover: withFallback('discover'), recommendations: withFallback('recommendations'),
         details: withFallback('details'), genres: withFallback('genres'),
-        search: withFallback('search'), personTitles: withFallback('personTitles') }
+        search: withFallback('search'), personTitles: withFallback('personTitles'), similar: withFallback('similar') }
     : tmdbImpl;
+
+  // "Títulos semelhantes" in the details (asked when the details open, cached 6 h like the
+  // rest): TMDB's recommendations, and its similar titles too when those are fewer than
+  // SIMILAR_MIN. Both through the hide rule. A separate request, not appended to the details:
+  // the details of ~100 titles are prefetched in the background and would each carry it.
+  var SIMILAR_MIN = 8;
+  var recsFiltered = noHidden(impl.recommendations, false);
+  var similarFiltered = noHidden(impl.similar, false);
+  function similar(item) {
+    if (mode === 'off') return Promise.resolve([]);
+    return recsFiltered(item).then(null, function () { return []; }).then(function (recs) {
+      if (recs.length >= SIMILAR_MIN) return recs;
+      return similarFiltered(item).then(function (more) { return recs.concat(more); }, function () { return recs; });
+    });
+  }
 
   // The last answers of the search screen by query and filter, so a letter deleted (or a
   // filter set back) shows its results at once, without waiting for the debounce.
@@ -606,6 +632,7 @@
     recommendations: noHidden(impl.recommendations, false),
     hide: HIDE,                 // the rule (Smart.hideRule) for the lists built elsewhere
     loadAnimationAllow: loadAnimationAllow,
+    similar: similar,
     details: impl.details,
     genres: impl.genres,
     imdbRating: imdbRating,

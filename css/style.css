@@ -1175,3 +1175,32 @@ body[data-zone="details"] #search { opacity: 0; }
 .is-lite .search__kb,
 .is-lite .search__chip,
 .is-lite .kb__key { transition: none; }
+
+/* ---------- "Títulos semelhantes" in the details (js/discover.js) ----------
+   Under the details, only the row's label peeks at the bottom. Down from the buttons lifts the
+   page (one transform; .is-lifted) so the row sits mid-screen, while the poster and the text
+   fade out and the cards fade in. The cards are the poster rows' cards. */
+.details__page {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  will-change: transform;
+  transition: transform 260ms var(--ease);
+}
+.details__page.is-lifted { transform: translate3d(0, -600px, 0); }
+.details__page .details__poster,
+.details__page .details__body,
+.details__similar .row__track { transition: opacity 200ms linear; }
+.details__page.is-lifted .details__poster,
+.details__page.is-lifted .details__body { opacity: 0; }
+.details__similar {
+  position: absolute;
+  left: 140px;
+  top: 955px;
+  width: 1780px;
+}
+.details__similar .row__label { color: var(--text-dim); }
+.details__page:not(.is-lifted) .details__similar .row__track { opacity: 0; }
+.is-lite .details__page { transition: transform 160ms var(--ease); }
+.is-lite .details__page .details__poster,
+.is-lite .details__page .details__body,
+.is-lite .details__similar .row__track { transition: none; }

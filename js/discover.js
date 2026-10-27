@@ -100,8 +100,11 @@
       lastKey: 0,
       heroTimer: null, bgTimer: null,
       heroFor: null,           // item whose text the hero shows
-      overlay: null            // null | { kind: 'details', … } | { kind: 'chooser', … }
+      overlay: null,           // null | { kind: 'details', … } | { kind: 'chooser', … }
+      stack: []                // details left for a similar title's: Back returns to them
     };
+
+    var STACK_MAX = 10;
 
     // ---------- data in ----------
 
@@ -525,17 +528,22 @@
       });
     }
 
-    function open(it) {
+    // Hold OK on a title: its app (or the chooser; the details when it is on none).
+    // from: the details overlay it was asked from (a "Títulos semelhantes" card), which is kept
+    // on the stack under the chooser or the new details.
+    function open(it, from) {
       it = it || focused();
       if (!it) return;
       appsForItem(it).then(function (res) {
-        if (ui.overlay) return;
+        if (ui.overlay !== (from || null)) return;
         if (!res.apps.length) {
           opts.toast(res.d.failed ? 'Sem conexão para ver onde assistir' : 'Não está em nenhum app instalado', true);
+          if (from) pushDetails();
           openDetails(it);
         } else if (res.apps.length === 1 || (it.app && res.apps[0].key === it.app)) {
           opts.launchTitle(it, res.apps[0]);
         } else {
+          if (from) pushDetails();
           openChooser(it, res.apps);
         }
       });
@@ -577,10 +585,12 @@
       it = it || focused();
       if (!it) return;
       clearTimeout(ui.bgTimer);
-      ui.overlay = { kind: 'details', item: it, buttons: [], i: 0, apps: opts.appsOf(it) || [] };
+      ui.overlay = { kind: 'details', item: it, buttons: [], i: 0, apps: opts.appsOf(it) || [], zone: 'buttons', sim: null };
+      el.chooser.hidden = true;
       drawDetails();
       el.details.hidden = false;
       opts.onOpen('details');
+      loadSimilar(ui.overlay);
       loadDetails(it).then(function () {
         if (!ui.overlay || ui.overlay.item !== it) return;
         ui.overlay.apps = opts.appsOf(it) || [];
@@ -607,6 +617,7 @@
       var imdb = d && d.imdbId && ui.imdb[d.imdbId];
       var imdbScore = imdb ? '<span class="rating rating--imdb"><b>IMDb</b> ' + Smart.formatRating(parseFloat(imdb)) + '</span>' : '';
       el.details.innerHTML =
+        '<div class="details__page">' +
         '<div class="details__poster"><div class="poster__art poster--p' + pal + '">' +
           '<span class="poster__kind">' + typeLabel(it.type) + '</span>' +
           '<span class="poster__title">' + escapeHtml(it.title) + '</span></div>' +
@@ -622,11 +633,99 @@
             return '<div class="btn' + (b.primary ? ' btn--primary' : '') + (b.on ? ' is-on' : '') + '">' + escapeHtml(b.label) + '</div>';
           }).join('') + '</div>' +
         '</div>' +
+        '<div class="details__similar" hidden><div class="row__label">Títulos semelhantes</div><div class="row__track"></div></div>' +
+        '</div>' +
         '<div class="details__credit">Dados de filmes e séries: TMDB. Este produto usa a API do TMDB, mas não é endossado nem certificado pelo TMDB.</div>';
       if (keepLabel) {
         for (var i = 0; i < o.buttons.length; i++) if (o.buttons[i].label === keepLabel) { o.i = i; break; }
       }
+      if (o.sim) { o.sim.cards = {}; o.sim.shown = -1; }   // the row was drawn again, empty
       paintOverlay();
+      paintSimilar();
+    }
+
+    // ---------- "Títulos semelhantes" (a row under the details) ----------
+    // Asked once when the details open (catalog.similar: recommendations, else similar too,
+    // cached), filtered and ordered by Smart.similarRow. Moving in it does no network; only a
+    // window of cards is in the DOM, as in the poster rows. Down from the buttons lifts the page
+    // to it, Up returns. OK opens that title's details (the current ones go on the stack, Back
+    // returns to them); holding OK opens it in its app.
+
+    function loadSimilar(o) {
+      opts.catalog.similar(o.item).then(function (list) {
+        if (ui.overlay !== o) return;
+        o.sim = { items: Smart.similarRow(list, o.item, function (k) { return opts.statusOf(k) === 'watched'; }, opts.appsOf, 20),
+          col: 0, first: 0, cards: {}, shown: -1 };
+        paintSimilar();
+      }, function (err) { console.warn('similar', o.item.key, err); });
+    }
+
+    function paintSimilar() {
+      var o = ui.overlay;
+      if (!o || o.kind !== 'details') return;
+      var box = el.details.querySelector('.details__similar'), page = el.details.querySelector('.details__page');
+      var s = o.sim, items = s ? s.items : [];
+      if (!items.length && o.zone === 'similar') o.zone = 'buttons';
+      box.hidden = !items.length;
+      page.classList.toggle('is-lifted', o.zone === 'similar');     // css: the row up, the rest fades
+      if (!items.length) return;
+      var track = box.lastChild;
+      if (s.col > s.first + VISIBLE - 1 - MARGIN) s.first = s.col - (VISIBLE - 1 - MARGIN);
+      if (s.col < s.first + MARGIN) s.first = Math.max(0, s.col - MARGIN);
+      if (s.shown !== s.first) {
+        s.shown = s.first;
+        var lo = Math.max(0, s.first - EXTRA), hi = Math.min(items.length, s.first + VISIBLE + EXTRA);
+        Object.keys(s.cards).forEach(function (c) {
+          if (c < lo || c >= hi) { track.removeChild(s.cards[c]); delete s.cards[c]; }
+        });
+        for (var c = lo; c < hi; c++) {
+          if (s.cards[c]) continue;
+          var n = cardNode(items[c], true);
+          n.style.transform = tr(c * STEP, 0);
+          track.appendChild(n);
+          s.cards[c] = n;
+        }
+        track.style.transform = tr(-s.first * STEP, 0);
+      }
+      Object.keys(s.cards).forEach(function (c) {
+        s.cards[c].classList.toggle('is-focused', o.zone === 'similar' && +c === s.col);
+      });
+    }
+
+    function onSimilar() {
+      var o = ui.overlay;
+      return !!(o && o.kind === 'details' && o.zone === 'similar' && o.sim && o.sim.items[o.sim.col]);
+    }
+
+    // The current details onto the stack (at most STACK_MAX, the oldest dropped).
+    function pushDetails() {
+      var o = ui.overlay;
+      if (!o || o.kind !== 'details') return;
+      ui.stack.push(o);
+      if (ui.stack.length > STACK_MAX) ui.stack.shift();
+    }
+
+    // Back from a similar title's details (or its chooser): the details it was opened from,
+    // as they were (focus, row position).
+    function popDetails() {
+      var o = ui.stack.pop();
+      ui.overlay = o;
+      el.chooser.hidden = true;
+      el.details.hidden = false;
+      drawDetails();
+      paintSimilar();
+      opts.onBackdrop(backdropUrl(o.item.backdrop) || null);
+      opts.onOpen('details');
+    }
+
+    // OK on a "Títulos semelhantes" card (app.js tells a short press from a long one).
+    function similarPress(long) {
+      if (!onSimilar()) return;
+      var o = ui.overlay, it = o.sim.items[o.sim.col];
+      if (long) { open(it, o); return; }
+      pushDetails();
+      openDetails(it);
+      opts.onBackdrop(backdropUrl(it.backdrop) || null);
     }
 
     function paintOverlay() {
@@ -635,7 +734,7 @@
       var nodes = o.kind === 'details'
         ? el.details.querySelectorAll('.btn')
         : el.chooser.querySelectorAll('.chooser__item');
-      for (var i = 0; i < nodes.length; i++) nodes[i].classList.toggle('is-focused', i === o.i);
+      for (var i = 0; i < nodes.length; i++) nodes[i].classList.toggle('is-focused', i === o.i && o.zone !== 'similar');
     }
 
     function closeOverlay() {
@@ -644,7 +743,8 @@
       ui.overlay = null;
       el.details.hidden = true;
       el.chooser.hidden = true;
-      if (kind === 'details') rebuild();   // marks may have changed the badges
+      if (kind === 'details' || ui.stack.length) rebuild();   // marks may have changed the badges
+      ui.stack = [];
       opts.onClose();
     }
 
@@ -653,7 +753,21 @@
       var o = ui.overlay;
       if (!o) return false;
       var n = o.kind === 'details' ? o.buttons.length : o.apps.length;
-      if (action === 'back') { closeOverlay(); return true; }
+      if (action === 'back') { if (ui.stack.length) popDetails(); else closeOverlay(); return true; }
+      if (o.kind === 'details' && o.zone === 'similar') {
+        if (dir.dy < 0) o.zone = 'buttons';
+        else if (dir.dx) o.sim.col = Math.max(0, Math.min(o.sim.items.length - 1, o.sim.col + dir.dx));
+        else if (action === 'ok') { similarPress(false); return true; }
+        paintSimilar();
+        paintOverlay();
+        return true;
+      }
+      if (o.kind === 'details' && dir.dy > 0 && o.sim && o.sim.items.length) {
+        o.zone = 'similar';
+        paintSimilar();
+        paintOverlay();
+        return true;
+      }
       if (o.kind === 'details' && dir.dx) { o.i = Math.max(0, Math.min(n - 1, o.i + dir.dx)); o.moved = true; }
       if (o.kind === 'chooser' && dir.dy) o.i = Math.max(0, Math.min(n - 1, o.i + dir.dy));
       if (action === 'ok') {
@@ -698,6 +812,8 @@
       openDetails: openDetails,
       overlay: function () { return ui.overlay ? ui.overlay.kind : null; },
       overlayKey: overlayKey,
+      onSimilar: onSimilar,          // a "Títulos semelhantes" card has the focus
+      similarPress: similarPress,
       closeOverlay: closeOverlay,
       refreshHero: function () { if (ui.mode === 'full') hero(); },
       // Background prefetch (details for the hero; availability checks for "Para você").

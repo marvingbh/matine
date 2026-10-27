@@ -376,6 +376,23 @@
     return out;
   }
 
+  // ---------- "Títulos semelhantes" (the details screen) ----------
+  // list: TMDB's recommendations, then (when they were few) its similar titles, already
+  // through the hide rule (catalog.js). Each title once, without the title itself and those
+  // marked "Já vi"; the ones known to be on an app of this TV first, then those not known
+  // yet, then those known to be on none (appsOf(item): apps, or null when not known).
+  function similarRow(list, item, isWatched, appsOf, limit) {
+    var seen = {}, groups = [[], [], []];
+    if (item) seen[item.key] = true;
+    (list || []).forEach(function (it) {
+      if (!it || seen[it.key] || (isWatched && isWatched(it.key))) return;
+      seen[it.key] = true;
+      var apps = appsOf ? appsOf(it) : null;
+      groups[apps === null || apps === undefined ? 1 : apps.length ? 0 : 2].push(it);
+    });
+    return groups[0].concat(groups[1], groups[2]).slice(0, limit || 20);
+  }
+
   // ---------- anime ----------
   // Japanese animation is left out of every TMDB row (config hideAnime, default on).
   // Discover calls also exclude TMDB's "anime" keyword (catalog.js); this check covers the
@@ -560,6 +577,7 @@
     isoDay: isoDay,
     newArrivals: newArrivals,
     newOrder: newOrder,
+    similarRow: similarRow,
     isRain: isRain,
     isAnime: isAnime,
     dropAnime: dropAnime,

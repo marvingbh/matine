@@ -434,6 +434,20 @@ test('animation: only Disney / Pixar (the allowlist) shows; config can turn it o
   assert.deepStrictEqual(rows.map(function (r) { return r.id + '=' + r.items.length; }), ['movie=2']);
 });
 
+test('Títulos semelhantes: each title once, not itself nor "Já vi", on the TV apps first', function () {
+  var self = item('movie', 1, 'Duna', [878]);
+  var a = item('movie', 2, 'Na Netflix', [878]), b = item('movie', 3, 'Não sei', [878]), c = item('movie', 4, 'Em nenhum app', [878]);
+  var d = item('movie', 5, 'Já visto', [878]), e = item('movie', 6, 'No Max', [878]);
+  var apps = { 'movie:2': ['netflix'], 'movie:4': [], 'movie:6': ['max'] };
+  function appsOf(it) { return apps[it.key] || null; }
+  function watched(k) { return k === 'movie:5'; }
+  // recommendations then similar, with repeats and the title itself
+  var list = [c, b, self, a, d, b, item('movie', 2, 'Na Netflix', [878]), e];
+  assert.deepStrictEqual(Smart.similarRow(list, self, watched, appsOf, 20).map(function (x) { return x.id; }), [2, 6, 3, 4]);
+  assert.deepStrictEqual(Smart.similarRow(list, self, watched, appsOf, 2).map(function (x) { return x.id; }), [2, 6]);
+  assert.deepStrictEqual(Smart.similarRow(null, self), []);
+});
+
 // catalog.js in a sandbox with a fake XMLHttpRequest: what it asks TMDB and what it returns.
 function catalogWith(cfg, answer) {
   var urls = [];
@@ -620,6 +634,23 @@ testAsync('catalog search: "Animação" with no text asks only Disney / Pixar co
     var n = t.urls.length;
     return t.Catalog.search({ text: '', cat: { movie: 18, tv: 18 }, year: null, rating: null, stream: null }).then(function () {
       t.urls.slice(n).forEach(function (u) { assert.ok(u.indexOf('with_companies') === -1, u); });
+    });
+  });
+});
+
+testAsync('catalog: Títulos semelhantes = recommendations, plus similar when fewer than 8 (both filtered)', function () {
+  var t = catalogWith({ tmdbToken: 'test' }, TMDB_ANSWER);       // anime and non-Disney animation are hidden
+  return t.Catalog.similar({ type: 'tv', id: 99, key: 'tv:99' }).then(function (list) {
+    assert.ok(t.urls[0].indexOf('/tv/99/recommendations') !== -1, t.urls[0]);
+    assert.ok(t.urls.some(function (u) { return u.indexOf('/tv/99/similar') !== -1; }), t.urls.join(' '));
+    assert.strictEqual(titles(list), '["Shogun","Shogun"]', 'merged; Smart.similarRow removes the repeat');
+  }).then(function () {
+    var many = { results: [] };
+    for (var i = 1; i <= 10; i++) many.results.push({ id: i, name: 'S' + i, poster_path: '/p.jpg', genre_ids: [18], original_language: 'en' });
+    var t2 = catalogWith({ tmdbToken: 'test' }, many);
+    return t2.Catalog.similar({ type: 'tv', id: 7, key: 'tv:7' }).then(function (list) {
+      assert.strictEqual(list.length, 10);
+      assert.ok(t2.urls.every(function (u) { return u.indexOf('/similar') === -1; }), 'enough recommendations: no /similar');
     });
   });
 });
